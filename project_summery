@@ -1,0 +1,1212 @@
+# Koro — Multilingual & Indigenous Language Platform
+
+## 1. Project Summary
+
+Koro is a multilingual language and indigenous-language preservation platform.
+
+The system allows users to:
+
+* Translate words and sentences between languages
+* Learn indigenous/local languages
+* Search vocabulary
+* Save favorite words and translations
+* Take pictures and identify objects
+* Get object names in different languages
+* Build a personal saved-language collection
+* Export saved vocabulary as a PDF/book
+* View personal activity history
+* Track activities by day, month, year, and custom date range
+
+The platform also includes an **Admin Dashboard** where administrators can manage languages, vocabulary, translations, users, image-recognition results, and approval requests.
+
+---
+
+# 2. Main User Flow
+
+```text
+User
+  ↓
+Login / Register
+  ↓
+Select Language
+  ↓
+Translate / Search / Image Recognition
+  ↓
+View Result
+  ↓
+Save Translation
+  ↓
+Personal Vocabulary Collection
+  ↓
+Organize by Category
+  ↓
+Export as PDF / Book
+```
+
+---
+
+# 3. Authentication & Login System
+
+Implement secure authentication.
+
+### User
+
+```text
+Register
+Login
+Logout
+Forgot Password
+Reset Password
+Change Password
+Update Profile
+```
+
+Use:
+
+```text
+Spring Security
+JWT Authentication
+Password Hashing
+Refresh Token
+Role-Based Access Control
+```
+
+Roles:
+
+```text
+USER
+ADMIN
+MODERATOR
+LANGUAGE_REVIEWER
+```
+
+Example:
+
+```text
+USER
+  ↓
+Normal application access
+
+MODERATOR
+  ↓
+Review user submissions
+
+LANGUAGE_REVIEWER
+  ↓
+Approve/reject language translations
+
+ADMIN
+  ↓
+Full dashboard access
+```
+
+---
+
+# 4. User Profile
+
+User profile should contain:
+
+```text
+id
+name
+email
+profileImage
+nativeLanguage
+preferredLanguage
+createdAt
+updatedAt
+lastLoginAt
+status
+```
+
+Example:
+
+```text
+Name: John
+Email: john@example.com
+Native Language: Bangla
+Learning Language: Chakma
+```
+
+---
+
+# 5. User Activity Log
+
+Every important user action should be recorded.
+
+Examples:
+
+```text
+Login
+Logout
+Translation
+Search
+Image Upload
+Image Recognition
+Save Word
+Remove Saved Word
+Add Vocabulary
+Export PDF
+Download Book
+Change Language
+Update Profile
+```
+
+Activity record:
+
+```text
+activity_logs
+----------------
+id
+user_id
+activity_type
+description
+reference_id
+metadata
+ip_address
+device
+created_at
+```
+
+Example:
+
+```json
+{
+  "activityType": "TRANSLATION",
+  "description": "Translated Water from English to Bangla",
+  "createdAt": "2026-08-22T14:30:00"
+}
+```
+
+---
+
+# 6. Activity Dashboard
+
+Users should be able to see their activity.
+
+### Today
+
+```text
+Today
+----------------
+Translations: 25
+Saved Words: 8
+Image Searches: 4
+PDF Exports: 1
+```
+
+### This Week
+
+```text
+Monday       12 activities
+Tuesday      20 activities
+Wednesday    15 activities
+Thursday     30 activities
+Friday       18 activities
+Saturday     25 activities
+```
+
+### Monthly
+
+```text
+August 2026
+
+Translations       420
+Saved Vocabulary    95
+Images              32
+PDF Exports          6
+```
+
+### Yearly
+
+```text
+2026
+
+January
+February
+March
+...
+August
+```
+
+Provide filtering:
+
+```text
+Today
+Yesterday
+Last 7 Days
+Last 30 Days
+This Month
+Last Month
+This Year
+Custom Date Range
+```
+
+---
+
+# 7. Activity Analytics API
+
+```http
+GET /api/v1/activity
+GET /api/v1/activity/today
+GET /api/v1/activity/week
+GET /api/v1/activity/month
+GET /api/v1/activity/year
+GET /api/v1/activity?from=2026-08-01&to=2026-08-22
+```
+
+Statistics:
+
+```http
+GET /api/v1/activity/statistics
+```
+
+Response:
+
+```json
+{
+  "totalActivities": 520,
+  "translations": 350,
+  "savedWords": 100,
+  "imageRecognitions": 50,
+  "pdfExports": 20
+}
+```
+
+---
+
+# 8. Saved Vocabulary
+
+Users should be able to save translations.
+
+Example:
+
+```text
+English:
+Tree
+
+Bangla:
+গাছ
+
+Chakma:
+[translation]
+
+Category:
+Nature
+
+Saved:
+Yes
+```
+
+Database:
+
+```text
+saved_words
+----------------
+id
+user_id
+concept_id
+language_id
+notes
+created_at
+```
+
+Users can:
+
+```text
+Save
+Remove
+Search
+Filter
+Sort
+Add Notes
+Create Collections
+```
+
+---
+
+# 9. Personal Collections
+
+Users should be able to create their own vocabulary books.
+
+Example:
+
+```text
+My Nature Words
+----------------
+Tree
+Water
+River
+Mountain
+Flower
+Bird
+```
+
+Another collection:
+
+```text
+Daily Life
+----------------
+House
+Food
+Chair
+Table
+Door
+Window
+```
+
+Database:
+
+```text
+collections
+collection_items
+```
+
+A user can create unlimited collections.
+
+---
+
+# 10. Book System
+
+The saved vocabulary should work like a digital book.
+
+Example:
+
+```text
+My Indigenous Language Book
+
+Chapter 1 — Nature
+
+1. Tree
+   English: Tree
+   Bangla: গাছ
+   Indigenous: [translation]
+
+2. Water
+   English: Water
+   Bangla: পানি
+   Indigenous: [translation]
+
+Chapter 2 — Animals
+
+1. Bird
+2. Fish
+3. Dog
+```
+
+The user can organize vocabulary into:
+
+```text
+Book
+ ├── Chapter
+ │     ├── Vocabulary
+ │     ├── Translation
+ │     ├── Image
+ │     ├── Pronunciation
+ │     └── Notes
+```
+
+---
+
+# 11. PDF Export
+
+Users can export their saved vocabulary as a PDF.
+
+API:
+
+```http
+POST /api/v1/export/pdf
+```
+
+Example:
+
+```json
+{
+  "collectionId": 10,
+  "language": "chakma"
+}
+```
+
+Generated PDF:
+
+```text
+My Indigenous Language Book
+
+Author:
+John
+
+Language:
+Chakma
+
+Chapter 1
+Nature
+
+Tree
+English: Tree
+Bangla: গাছ
+Chakma: [translation]
+
+Water
+English: Water
+Bangla: পানি
+Chakma: [translation]
+```
+
+PDF should support:
+
+* Cover page
+* User name
+* Book title
+* Language
+* Chapters
+* Vocabulary
+* Translation
+* Pronunciation
+* Images
+* Notes
+* Page numbers
+* Date generated
+
+---
+
+# 12. PDF Book History
+
+Keep export history.
+
+```text
+pdf_exports
+----------------
+id
+user_id
+collection_id
+file_url
+file_name
+file_size
+created_at
+```
+
+User can see:
+
+```text
+My Exports
+
+My Nature Book.pdf
+August 22, 2026
+
+Daily Life.pdf
+August 18, 2026
+```
+
+---
+
+# 13. Image Recognition
+
+User can take a picture:
+
+```text
+Camera
+   ↓
+Upload
+   ↓
+AI Vision
+   ↓
+Object Detection
+   ↓
+Concept
+   ↓
+Translations
+```
+
+Example:
+
+```text
+Picture:
+🌳
+
+Detected:
+Tree
+
+English:
+Tree
+
+Bangla:
+গাছ
+
+Chakma:
+[translation]
+```
+
+Save result:
+
+```text
+Image
+Concept
+Recognition confidence
+Translations
+User
+Created date
+```
+
+---
+
+# 14. User Submission & Approval System
+
+This is very important for indigenous-language data.
+
+Users should be able to submit new translations.
+
+Example:
+
+```text
+Concept:
+Tree
+
+Language:
+Chakma
+
+Suggested Translation:
+[translation]
+
+Pronunciation:
+[pronunciation]
+
+Submitted By:
+User A
+
+Status:
+PENDING
+```
+
+It should NOT immediately become an official translation.
+
+Workflow:
+
+```text
+USER
+ ↓
+Submit Translation
+ ↓
+PENDING
+ ↓
+ADMIN / LANGUAGE REVIEWER
+ ↓
+Review
+ ├── APPROVE
+ └── REJECT
+```
+
+Only approved translations become official.
+
+---
+
+# 15. Admin Dashboard
+
+Create a separate web dashboard.
+
+Dashboard sections:
+
+```text
+Dashboard
+Users
+Languages
+Categories
+Concepts
+Translations
+Translation Approvals
+User Submissions
+Image Recognition
+Collections
+PDF Exports
+Activity Logs
+Reports
+Settings
+```
+
+---
+
+# 16. Admin Dashboard Statistics
+
+Admin homepage:
+
+```text
+Total Users
+----------------
+12,500
+
+Total Languages
+----------------
+15
+
+Total Concepts
+----------------
+25,000
+
+Total Translations
+----------------
+125,000
+
+Pending Approvals
+----------------
+320
+
+Today's Activities
+----------------
+4,850
+```
+
+Charts:
+
+```text
+Daily Users
+Monthly Users
+Translations
+Saved Words
+Image Recognition
+Language Usage
+PDF Exports
+```
+
+---
+
+# 17. Translation Approval Dashboard
+
+Admin sees:
+
+```text
+Pending Translation
+
+Concept:
+Water
+
+Language:
+Indigenous Language
+
+Suggested Translation:
+[translation]
+
+Submitted By:
+User Name
+
+Date:
+22 August 2026
+
+[View Details]
+
+[Approve] [Reject]
+```
+
+Admin can also add:
+
+```text
+Reviewer Note
+```
+
+---
+
+# 18. Language Management
+
+Admin can:
+
+```text
+Add Language
+Edit Language
+Disable Language
+Delete Language
+Add Language Description
+Add Native Name
+Add ISO Code
+Add Region
+```
+
+Example:
+
+```text
+Language:
+Chakma
+
+Native Name:
+চাকমা
+
+Code:
+ccp
+
+Region:
+Bangladesh / India
+
+Status:
+Active
+```
+
+---
+
+# 19. Concept Management
+
+Admin can create concepts:
+
+```text
+Concept:
+Tree
+
+Category:
+Nature
+
+Description:
+A woody perennial plant.
+
+Reference Image:
+tree.jpg
+```
+
+Then translations can be attached:
+
+```text
+Tree
+ ├── English
+ ├── Bangla
+ ├── Chakma
+ ├── Marma
+ └── Other Languages
+```
+
+---
+
+# 20. Database Structure
+
+Recommended PostgreSQL database:
+
+```text
+users
+roles
+user_roles
+
+languages
+categories
+concepts
+translations
+
+translation_submissions
+translation_reviews
+
+images
+image_recognition_results
+
+collections
+collection_items
+
+activity_logs
+
+pdf_exports
+
+refresh_tokens
+```
+
+Relationship:
+
+```text
+User
+ ├── Activities
+ ├── Saved Collections
+ ├── Translation Submissions
+ ├── Image Searches
+ └── PDF Exports
+
+Concept
+ ├── Category
+ ├── Translations
+ ├── Images
+ └── Recognition Results
+
+Language
+ └── Translations
+```
+
+---
+
+# 21. Recommended Spring Boot Structure
+
+```text
+src/main/java/com/example/koro/
+
+├── KoroApplication.java
+│
+├── config/
+│   ├── SecurityConfig.java
+│   ├── JpaConfig.java
+│   ├── StorageConfig.java
+│   └── OpenApiConfig.java
+│
+├── auth/
+│   ├── controller/
+│   ├── service/
+│   ├── dto/
+│   └── security/
+│
+├── user/
+│   ├── controller/
+│   ├── service/
+│   ├── repository/
+│   ├── entity/
+│   └── dto/
+│
+├── language/
+│   ├── controller/
+│   ├── service/
+│   ├── repository/
+│   ├── entity/
+│   └── dto/
+│
+├── concept/
+│
+├── translation/
+│
+├── submission/
+│
+├── image/
+│
+├── collection/
+│
+├── activity/
+│
+├── export/
+│
+├── admin/
+│
+├── common/
+│   ├── exception/
+│   ├── response/
+│   ├── enums/
+│   └── utils/
+│
+└── integration/
+    ├── vision/
+    └── storage/
+```
+
+---
+
+# 22. Important API Groups
+
+### Authentication
+
+```http
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+POST /api/v1/auth/forgot-password
+POST /api/v1/auth/reset-password
+```
+
+### Languages
+
+```http
+GET    /api/v1/languages
+GET    /api/v1/languages/{id}
+POST   /api/v1/admin/languages
+PUT    /api/v1/admin/languages/{id}
+DELETE /api/v1/admin/languages/{id}
+```
+
+### Translation
+
+```http
+POST /api/v1/translations/search
+GET  /api/v1/translations
+```
+
+### Saved Collections
+
+```http
+GET    /api/v1/collections
+POST   /api/v1/collections
+GET    /api/v1/collections/{id}
+PUT    /api/v1/collections/{id}
+DELETE /api/v1/collections/{id}
+
+POST   /api/v1/collections/{id}/items
+DELETE /api/v1/collections/{id}/items/{itemId}
+```
+
+### Image Recognition
+
+```http
+POST /api/v1/images/recognize
+GET  /api/v1/images/history
+```
+
+### Activity
+
+```http
+GET /api/v1/activity
+GET /api/v1/activity/statistics
+```
+
+### PDF
+
+```http
+POST /api/v1/export/pdf
+GET  /api/v1/export/history
+GET  /api/v1/export/{id}
+```
+
+### User Submissions
+
+```http
+POST /api/v1/submissions
+GET  /api/v1/submissions
+```
+
+### Admin Approval
+
+```http
+GET  /api/v1/admin/submissions/pending
+GET  /api/v1/admin/submissions/{id}
+POST /api/v1/admin/submissions/{id}/approve
+POST /api/v1/admin/submissions/{id}/reject
+```
+
+---
+
+# 23. Security
+
+Use:
+
+```text
+Spring Security
+JWT
+BCrypt password hashing
+Role-based authorization
+Refresh tokens
+API validation
+Rate limiting
+File upload validation
+Maximum image size
+Secure file storage
+Audit logging
+```
+
+Never store plain-text passwords.
+
+Admin APIs must require:
+
+```text
+ROLE_ADMIN
+```
+
+Reviewer APIs:
+
+```text
+ROLE_LANGUAGE_REVIEWER
+```
+
+---
+
+# 24. Storage
+
+Do not store large images/PDF files directly inside PostgreSQL.
+
+Use object storage:
+
+```text
+AWS S3
+Google Cloud Storage
+Cloudflare R2
+MinIO
+```
+
+Database stores only:
+
+```text
+file_url
+file_name
+file_size
+mime_type
+created_at
+```
+
+---
+
+# 25. Final System Architecture
+
+```text
+                       ┌────────────────────┐
+                       │    Flutter App     │
+                       │ Android / iOS      │
+                       └─────────┬──────────┘
+                                 │
+                                 │ REST API
+                                 ↓
+                     ┌───────────────────────┐
+                     │    Spring Boot API    │
+                     └───────────┬───────────┘
+                                 │
+       ┌─────────────────────────┼─────────────────────────┐
+       │                         │                         │
+       ↓                         ↓                         ↓
+ Authentication             Translation              Image AI
+       │                         │                         │
+       ↓                         ↓                         ↓
+    Users                    PostgreSQL              Vision API
+       │                         │
+       └──────────────┬──────────┘
+                      ↓
+               Activity System
+                      │
+                      ↓
+               Collection System
+                      │
+                      ↓
+                PDF Generator
+                      │
+                      ↓
+                Object Storage
+
+
+                    ADMIN DASHBOARD
+                          │
+        ┌─────────────────┼─────────────────┐
+        ↓                 ↓                 ↓
+   Users Management   Translation       Approvals
+                      Management
+        │                 │                 │
+        └─────────────────┼─────────────────┘
+                          ↓
+                    PostgreSQL
+```
+
+# 26. MVP Development Order
+
+Build the system in phases instead of developing everything at once.
+
+### Phase 1 — Backend Foundation
+
+```text
+[ ] Spring Boot setup
+[ ] PostgreSQL setup
+[ ] User entity
+[ ] Authentication
+[ ] JWT
+[ ] Role system
+```
+
+### Phase 2 — Language System
+
+```text
+[ ] Language CRUD
+[ ] Category CRUD
+[ ] Concept CRUD
+[ ] Translation CRUD
+[ ] Translation search
+```
+
+### Phase 3 — User Features
+
+```text
+[ ] Save vocabulary
+[ ] Collections
+[ ] Notes
+[ ] User profile
+```
+
+### Phase 4 — Activity
+
+```text
+[ ] Activity logging
+[ ] Daily statistics
+[ ] Weekly statistics
+[ ] Monthly statistics
+[ ] Yearly statistics
+[ ] Custom date filtering
+```
+
+### Phase 5 — Image Recognition
+
+```text
+[ ] Image upload
+[ ] Vision API integration
+[ ] Object detection
+[ ] Concept matching
+[ ] Translation response
+```
+
+### Phase 6 — Approval System
+
+```text
+[ ] User translation submission
+[ ] Pending status
+[ ] Admin review
+[ ] Approve
+[ ] Reject
+[ ] Reviewer notes
+```
+
+### Phase 7 — PDF Book
+
+```text
+[ ] Collection → Book
+[ ] Chapters
+[ ] Cover page
+[ ] Vocabulary pages
+[ ] Images
+[ ] Translations
+[ ] PDF generation
+[ ] Export history
+```
+
+### Phase 8 — Admin Dashboard
+
+```text
+[ ] Admin login
+[ ] Dashboard statistics
+[ ] User management
+[ ] Language management
+[ ] Concept management
+[ ] Translation management
+[ ] Approval management
+[ ] Activity reports
+[ ] PDF/export reports
+```
+
+# 27. Final Product Vision
+
+The final product should behave like a combination of:
+
+```text
+Translation Platform
+        +
+Indigenous Language Dictionary
+        +
+Image Recognition
+        +
+Personal Vocabulary App
+        +
+Digital Language Book
+        +
+Language Preservation Database
+        +
+Admin/Moderation Platform
+```
+
+The most important architectural principle is:
+
+**Languages, concepts, translations, users, activities, and collections must be dynamic and database-driven.**
+
+This means you can start with:
+
+```text
+English
+Bangla
+1 Indigenous Language
+```
+
+and later add:
+
+```text
+10 languages
+20 languages
+50+ languages
+```
+
+without redesigning the database.
+
+The admin approval workflow also ensures that indigenous-language data is **reviewed and verified before becoming official**, which is especially important for preserving accurate community language data.
