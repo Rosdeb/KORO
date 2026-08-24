@@ -79,6 +79,21 @@ public class SecurityConfig {
                 auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
                     .requestMatchers("/error").permitAll()
+                    .requestMatchers("/api/v1/languages").permitAll()
+                    .requestMatchers("/api/v1/translations", "/api/v1/translations/**").permitAll()
+                    .requestMatchers(
+                                "/api/v1/languages",
+                                "/api/v1/languages/**",
+
+                                "/api/v1/categories",
+                                "/api/v1/categories/**",
+
+                                "/api/v1/concepts",
+                                "/api/v1/concepts/**",
+
+                                "/api/v1/translations",
+                                "/api/v1/translations/**"
+                        ).permitAll()
                     .requestMatchers("/h2-console/**").permitAll()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/api/v1/admin/submissions/**").hasAnyRole("ADMIN", "LANGUAGE_REVIEWER")
