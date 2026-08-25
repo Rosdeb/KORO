@@ -2,6 +2,7 @@ package com.koro.app.translation.controller;
 
 import com.koro.app.activity.entity.ActivityType;
 import com.koro.app.activity.service.ActivityLogService;
+import com.koro.app.auth.dto.MessageResponse;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.ConceptRepository;
 import com.koro.app.language.entity.Language;
@@ -127,6 +128,44 @@ public class TranslationController {
         activityLogService.log(ActivityType.ADD_VOCABULARY, "Created translation for Concept " + concept.getName() + " in " + language.getName(), saved.getId(), null);
 
         return ResponseEntity.ok(TranslationResponse.fromTranslation(saved));
+    }
+
+    @PutMapping("/admin/translations/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateTranslation(@PathVariable String id, @RequestBody TranslationRequest request) {
+        return translationRepository.findById(id)
+                .map(translation -> {
+                    if (request.getConceptId() != null) {
+                        Concept concept = conceptRepository.findById(request.getConceptId())
+                                .orElseThrow(() -> new RuntimeException("Concept not found"));
+                        translation.setConcept(concept);
+                    }
+                    if (request.getLanguageId() != null) {
+                        Language language = languageRepository.findById(request.getLanguageId())
+                                .orElseThrow(() -> new RuntimeException("Language not found"));
+                        translation.setLanguage(language);
+                    }
+                    if (request.getText() != null) translation.setText(request.getText());
+                    if (request.getPronunciation() != null) translation.setPronunciation(request.getPronunciation());
+                    if (request.getNotes() != null) translation.setNotes(request.getNotes());
+
+                    Translation saved = translationRepository.save(translation);
+                    activityLogService.log(ActivityType.ADD_VOCABULARY, "Updated translation for Concept " + saved.getConcept().getName() + " in " + saved.getLanguage().getName(), saved.getId(), null);
+                    return ResponseEntity.ok(TranslationResponse.fromTranslation(saved));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/admin/translations/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteTranslation(@PathVariable String id) {
+        return translationRepository.findById(id)
+                .map(translation -> {
+                    translationRepository.delete(translation);
+                    activityLogService.log(ActivityType.ADD_VOCABULARY, "Deleted translation " + translation.getId(), translation.getId(), null);
+                    return ResponseEntity.ok(new MessageResponse("Translation deleted successfully!"));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
 

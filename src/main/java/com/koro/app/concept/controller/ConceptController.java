@@ -1,5 +1,6 @@
 package com.koro.app.concept.controller;
 
+import com.koro.app.auth.dto.MessageResponse;
 import com.koro.app.concept.entity.Category;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.CategoryRepository;
@@ -33,6 +34,29 @@ public class ConceptController {
             return ResponseEntity.badRequest().body("Category already exists");
         }
         return ResponseEntity.ok(categoryRepository.save(category));
+    }
+
+    @PutMapping("/admin/categories/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateCategory(@PathVariable String id, @RequestBody Category request) {
+        return categoryRepository.findById(id)
+                .map(category -> {
+                    if (request.getName() != null) category.setName(request.getName());
+                    if (request.getDescription() != null) category.setDescription(request.getDescription());
+                    return ResponseEntity.ok(categoryRepository.save(category));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/admin/categories/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteCategory(@PathVariable String id) {
+        return categoryRepository.findById(id)
+                .map(category -> {
+                    categoryRepository.delete(category);
+                    return ResponseEntity.ok(new MessageResponse("Category deleted successfully!"));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // --- Concept APIs ---
@@ -72,5 +96,34 @@ public class ConceptController {
                 .build();
 
         return ResponseEntity.ok(conceptRepository.save(concept));
+    }
+
+    @PutMapping("/admin/concepts/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateConcept(@PathVariable String id, @RequestBody Concept request) {
+        return conceptRepository.findById(id)
+                .map(concept -> {
+                    if (request.getName() != null) concept.setName(request.getName());
+                    if (request.getDescription() != null) concept.setDescription(request.getDescription());
+                    if (request.getReferenceImage() != null) concept.setReferenceImage(request.getReferenceImage());
+                    if (request.getCategory() != null && request.getCategory().getId() != null) {
+                        Category category = categoryRepository.findById(request.getCategory().getId())
+                                .orElseThrow(() -> new RuntimeException("Category not found"));
+                        concept.setCategory(category);
+                    }
+                    return ResponseEntity.ok(conceptRepository.save(concept));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/admin/concepts/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteConcept(@PathVariable String id) {
+        return conceptRepository.findById(id)
+                .map(concept -> {
+                    conceptRepository.delete(concept);
+                    return ResponseEntity.ok(new MessageResponse("Concept deleted successfully!"));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
