@@ -104,23 +104,10 @@ public class AuthController {
                 .status(UserStatus.ACTIVE)
                 .build();
 
-        Set<String> strRoles = signUpRequest.getRoles();
-        Set<Role> roles = new HashSet<>();
-
-        if (strRoles == null) {
-            roles.add(Role.ROLE_USER);
-        } else {
-            strRoles.forEach(role -> {
-                switch (role.toLowerCase()) {
-                    case "admin" -> roles.add(Role.ROLE_ADMIN);
-                    case "mod" -> roles.add(Role.ROLE_MODERATOR);
-                    case "reviewer" -> roles.add(Role.ROLE_LANGUAGE_REVIEWER);
-                    default -> roles.add(Role.ROLE_USER);
-                }
-            });
-        }
-
-        user.setRoles(roles);
+        // Self-registration always grants the base USER role only. Elevated roles
+        // (ADMIN, LANGUAGE_REVIEWER, MODERATOR) can only be granted afterwards by
+        // an existing admin via PUT /api/v1/admin/users/{id}/roles.
+        user.setRoles(Set.of(Role.ROLE_USER));
         User savedUser = userRepository.save(user);
 
         // Log registration

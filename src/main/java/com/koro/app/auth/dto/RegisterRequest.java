@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
-import java.util.Set;
 
 @Getter
 @Setter
@@ -26,6 +25,4 @@ public class RegisterRequest {
     private String nativeLanguage;
 
     private String preferredLanguage;
-
-    private Set<String> roles;
 }
