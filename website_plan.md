@@ -41,7 +41,7 @@ The API already models four roles. The site's structure should map directly onto
 | My Books | `/app/books` | Personal vocabulary collections, list + create. |
 | Book reader | `/app/books/[id]` | Chapters, items, notes; add/reorder/remove words. |
 | Export as PDF | `/app/books/[id]/export` | Choose a language, generate, download; export history. |
-| Suggest a Translation | `/app/submissions/new` | Propose a word for a concept + language, add pronunciation. |
+| Suggest a Word | `/app/submissions/new` | Pick a category + source language, enter the word plus its Bangla/English meaning, add pronunciation/example/note. |
 | My Submissions | `/app/submissions` | Track pending/approved/rejected, with reviewer notes. |
 | My Activity | `/app/activity` | Filterable log + charts: today, week, month, year, custom range. |
 | Profile & Settings | `/app/settings` | Name, avatar, native/preferred language, password. |
@@ -95,7 +95,7 @@ Photo captured/uploaded → Vision service labels it → Matched to a concept
 | Scan an object | `POST /images/recognize` | Multipart upload; returns label + matched concept + translations |
 | My Books | `GET/POST /collections` | Chapters via `POST /collections/{id}/items` |
 | Export as PDF | `POST /export/pdf` | File URL returned; history via `GET /export/history` |
-| Suggest a Translation | `POST /submissions` | Status starts `PENDING` |
+| Suggest a Word | `POST /submissions` | Full entry: category, source language + word, Bangla + English meaning; status starts `PENDING` |
 | Submission Review (reviewer) | `POST /admin/submissions/{id}/approve|reject` | Gated on `ROLE_ADMIN` or `ROLE_LANGUAGE_REVIEWER` |
 | My Activity | `GET /activity`, `GET /activity/statistics` | Date-range query params drive the chart |
 | Login / Register | `POST /auth/login`, `POST /auth/register` | Refresh via `POST /auth/refresh`, silent-refresh on 401 |

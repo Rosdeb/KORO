@@ -1,11 +1,12 @@
 package com.koro.app.submission.entity;
 
-import com.koro.app.concept.entity.Concept;
+import com.koro.app.concept.entity.Category;
 import com.koro.app.language.entity.Language;
 import com.koro.app.user.entity.User;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.DocumentReference;
 import java.time.LocalDateTime;
@@ -22,14 +23,20 @@ public class TranslationSubmission {
     private String id;
 
     @DocumentReference
-    private Concept concept;
+    private Category category;
 
     @DocumentReference
-    private Language language;
+    private Language sourceLanguage;
 
-    private String suggestedTranslation;
+    private String sourceWord;
+
+    private String banglaTranslation;
+
+    private String englishTranslation;
 
     private String pronunciation;
+
+    private String exampleSentence;
 
     private String notes;
 
@@ -41,11 +48,16 @@ public class TranslationSubmission {
 
     private String reviewerNote;
 
+    private String rejectionReason;
+
     @DocumentReference
     private User reviewedBy;
 
     @CreatedDate
     private LocalDateTime createdAt;
-    
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
     private LocalDateTime reviewedAt;
 }

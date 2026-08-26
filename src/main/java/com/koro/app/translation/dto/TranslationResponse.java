@@ -19,6 +19,7 @@ public class TranslationResponse {
     private String pronunciation;
     private boolean verified;
     private String notes;
+    private String exampleSentence;
 
     public static TranslationResponse fromTranslation(Translation t) {
         return TranslationResponse.builder()
@@ -32,6 +33,7 @@ public class TranslationResponse {
                 .pronunciation(t.getPronunciation())
                 .verified(t.isVerified())
                 .notes(t.getNotes())
+                .exampleSentence(t.getExampleSentence())
                 .build();
     }
 }

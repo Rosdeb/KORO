@@ -1,7 +1,6 @@
 package com.koro.app.submission.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,15 +8,23 @@ import lombok.Setter;
 @Setter
 public class SubmissionRequest {
     @NotBlank
-    private String conceptId;
+    private String categoryId;
 
     @NotBlank
-    private String languageId;
+    private String sourceLanguageId;
 
     @NotBlank
-    private String suggestedTranslation;
+    private String sourceWord;
+
+    @NotBlank
+    private String banglaTranslation;
+
+    @NotBlank
+    private String englishTranslation;
 
     private String pronunciation;
 
-    private String notes;
+    private String exampleSentence;
+
+    private String note;
 }

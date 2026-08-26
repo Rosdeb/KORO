@@ -38,6 +38,8 @@ public class Translation {
 
     private String notes;
 
+    private String exampleSentence;
+
     @CreatedDate
     private LocalDateTime createdAt;
 

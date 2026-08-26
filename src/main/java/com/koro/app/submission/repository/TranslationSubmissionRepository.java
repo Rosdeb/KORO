@@ -10,4 +10,7 @@ import java.util.List;
 public interface TranslationSubmissionRepository extends MongoRepository<TranslationSubmission, String> {
     List<TranslationSubmission> findByStatus(SubmissionStatus status);
     List<TranslationSubmission> findBySubmittedById(String userId);
+    List<TranslationSubmission> findBySourceLanguageIdAndSourceWordIgnoreCaseAndStatusNot(
+            String sourceLanguageId, String sourceWord, SubmissionStatus status);
+    List<TranslationSubmission> findByReviewedByIdOrderByReviewedAtDesc(String reviewerId);
 }

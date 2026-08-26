@@ -99,7 +99,7 @@ public class ConceptController {
     }
 
     @PutMapping("/admin/concepts/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
     public ResponseEntity<?> updateConcept(@PathVariable String id, @RequestBody Concept request) {
         return conceptRepository.findById(id)
                 .map(concept -> {

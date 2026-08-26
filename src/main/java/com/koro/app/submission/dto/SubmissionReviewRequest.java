@@ -7,4 +7,7 @@ import lombok.Setter;
 @Setter
 public class SubmissionReviewRequest {
     private String reviewerNote;
+
+    // Required by the reject endpoint; ignored by approve.
+    private String rejectionReason;
 }

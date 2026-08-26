@@ -13,4 +13,5 @@ public interface TranslationRepository extends MongoRepository<Translation, Stri
     List<Translation> findByConceptId(String conceptId);
     List<Translation> findByTextContainingIgnoreCase(String text);
     List<Translation> findByLanguageIdAndTextContainingIgnoreCase(String languageId, String text);
+    List<Translation> findByLanguageIdAndTextIgnoreCase(String languageId, String text);
 }

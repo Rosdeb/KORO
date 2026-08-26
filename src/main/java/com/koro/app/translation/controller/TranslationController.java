@@ -131,7 +131,7 @@ public class TranslationController {
     }
 
     @PutMapping("/admin/translations/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
     public ResponseEntity<?> updateTranslation(@PathVariable String id, @RequestBody TranslationRequest request) {
         return translationRepository.findById(id)
                 .map(translation -> {

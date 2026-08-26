@@ -71,6 +71,14 @@ public class DatabaseInitializer implements CommandLineRunner {
                     .roles(Set.of(Role.ROLE_LANGUAGE_REVIEWER, Role.ROLE_USER))
                     .build();
 
+            User moderator = User.builder()
+                    .name("Koro Moderator")
+                    .email("moderator@koro.com")
+                    .password(passwordEncoder.encode("password"))
+                    .status(UserStatus.ACTIVE)
+                    .roles(Set.of(Role.ROLE_MODERATOR, Role.ROLE_USER))
+                    .build();
+
             User user = User.builder()
                     .name("John Doe")
                     .email("user@koro.com")
@@ -83,6 +91,7 @@ public class DatabaseInitializer implements CommandLineRunner {
 
             userRepository.save(admin);
             userRepository.save(reviewer);
+            userRepository.save(moderator);
             userRepository.save(user);
         }
 
