@@ -5,6 +5,7 @@ import com.koro.app.activity.service.ActivityLogService;
 import com.koro.app.auth.dto.MessageResponse;
 import com.koro.app.language.entity.Language;
 import com.koro.app.language.repository.LanguageRepository;
+import com.koro.app.translation.repository.TranslationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +22,9 @@ public class LanguageController {
     @Autowired
     private ActivityLogService activityLogService;
 
+    @Autowired
+    private TranslationRepository translationRepository;
+
     // Public / User access
     @GetMapping("/languages")
     public ResponseEntity<List<Language>> getAllLanguages() {
@@ -35,6 +39,12 @@ public class LanguageController {
     }
 
     // Admin access
+    @GetMapping("/admin/languages")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
+    public ResponseEntity<List<Language>> getAllLanguagesForAdmin() {
+        return ResponseEntity.ok(languageRepository.findAll());
+    }
+
     @PostMapping("/admin/languages")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createLanguage(@RequestBody Language language) {
@@ -47,7 +57,7 @@ public class LanguageController {
     }
 
     @PutMapping("/admin/languages/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MODERATOR')")
     public ResponseEntity<?> updateLanguage(@PathVariable String id, @RequestBody Language request) {
         return languageRepository.findById(id)
                 .map(language -> {
@@ -66,10 +76,14 @@ public class LanguageController {
     }
 
     @DeleteMapping("/admin/languages/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MODERATOR')")
     public ResponseEntity<?> deleteLanguage(@PathVariable String id) {
         return languageRepository.findById(id)
-                .map(language -> {
+                .<ResponseEntity<?>>map(language -> {
+                    if (!translationRepository.findByLanguageId(id).isEmpty()) {
+                        return ResponseEntity.badRequest().body(new MessageResponse(
+                                "Error: Language has existing translations and cannot be deleted"));
+                    }
                     languageRepository.delete(language);
                     activityLogService.log(ActivityType.CHANGE_LANGUAGE, "Deleted language: " + language.getName(), id, null);
                     return ResponseEntity.ok(new MessageResponse("Language deleted successfully!"));

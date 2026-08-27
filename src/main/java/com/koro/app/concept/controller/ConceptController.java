@@ -5,6 +5,7 @@ import com.koro.app.concept.entity.Category;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.CategoryRepository;
 import com.koro.app.concept.repository.ConceptRepository;
+import com.koro.app.translation.repository.TranslationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +21,9 @@ public class ConceptController {
 
     @Autowired
     private ConceptRepository conceptRepository;
+
+    @Autowired
+    private TranslationRepository translationRepository;
 
     // --- Category APIs ---
     @GetMapping("/categories")
@@ -120,7 +124,11 @@ public class ConceptController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteConcept(@PathVariable String id) {
         return conceptRepository.findById(id)
-                .map(concept -> {
+                .<ResponseEntity<?>>map(concept -> {
+                    if (!translationRepository.findByConceptId(id).isEmpty()) {
+                        return ResponseEntity.badRequest().body(new MessageResponse(
+                                "Error: Concept has existing translations and cannot be deleted"));
+                    }
                     conceptRepository.delete(concept);
                     return ResponseEntity.ok(new MessageResponse("Concept deleted successfully!"));
                 })

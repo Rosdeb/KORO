@@ -104,6 +104,7 @@ public class SecurityConfig {
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/api/v1/admin/submissions/**").hasAnyRole("ADMIN", "LANGUAGE_REVIEWER", "MODERATOR")
                     .requestMatchers(HttpMethod.PUT, "/api/v1/admin/concepts/*", "/api/v1/admin/translations/*").hasAnyRole("ADMIN", "MODERATOR")
+                    .requestMatchers(HttpMethod.GET, "/api/v1/admin/languages").hasAnyRole("ADMIN", "MODERATOR")
                     .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             );

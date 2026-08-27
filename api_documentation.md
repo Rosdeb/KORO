@@ -330,9 +330,10 @@ A submission is a full dictionary entry — a word in its **source language**, p
 ### Language / Category / Concept / Translation CRUD
 *   **URLs**:
     ```http
+    GET    /api/v1/admin/languages          -- ADMIN or MODERATOR; returns ALL languages, including inactive ones
     POST   /api/v1/admin/languages
     PUT    /api/v1/admin/languages/{id}
-    DELETE /api/v1/admin/languages/{id}
+    DELETE /api/v1/admin/languages/{id}     -- rejected (400) if any translation still references the language
 
     POST   /api/v1/admin/categories
     PUT    /api/v1/admin/categories/{id}
@@ -340,13 +341,14 @@ A submission is a full dictionary entry — a word in its **source language**, p
 
     POST   /api/v1/admin/concepts
     PUT    /api/v1/admin/concepts/{id}      -- ADMIN or MODERATOR (see §3)
-    DELETE /api/v1/admin/concepts/{id}
+    DELETE /api/v1/admin/concepts/{id}      -- rejected (400) if any translation still references the concept
 
     POST   /api/v1/admin/translations
     PUT    /api/v1/admin/translations/{id}  -- ADMIN or MODERATOR (see §4)
     DELETE /api/v1/admin/translations/{id}
     ```
-*   **Access**: `ROLE_ADMIN` only, except the two `PUT` routes marked above which also accept `ROLE_MODERATOR`.
+*   **Access**: `ROLE_ADMIN` only, except the routes marked above which also accept `ROLE_MODERATOR`.
+*   **Note**: the public `GET /api/v1/languages` only returns languages with `active: true` (see §3). To manage — and see — inactive languages, use the admin-only `GET /api/v1/admin/languages`, which returns every language regardless of `active` status. Setting `active: false` via `PUT` is a soft-deactivation: the record still exists and is still editable, it just drops out of the public list.
 
 ---
 

@@ -54,6 +54,7 @@ public class TranslationController {
         }
 
         return ResponseEntity.ok(results.stream()
+                .filter(t -> t.getConcept() != null && t.getLanguage() != null)
                 .map(TranslationResponse::fromTranslation)
                 .collect(Collectors.toList()));
     }
@@ -101,6 +102,7 @@ public class TranslationController {
         );
 
         return ResponseEntity.ok(results.stream()
+                .filter(t -> t.getConcept() != null && t.getLanguage() != null)
                 .map(TranslationResponse::fromTranslation)
                 .collect(Collectors.toList()));
     }
