@@ -8,6 +8,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.DocumentReference;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Document(collection = "collections")
 @Getter
@@ -26,6 +27,14 @@ public class Collection {
     private String name;
 
     private String description;
+
+    /**
+     * Chapter names in the order the author wants them printed. May be null / partial;
+     * any chapter not listed here is appended after these, ordered by name. Kept as a
+     * plain ordered list rather than a chapter entity because chapters have no data of
+     * their own beyond a name and a position.
+     */
+    private List<String> chapterOrder;
 
     @CreatedDate
     private LocalDateTime createdAt;

@@ -87,6 +87,9 @@ public class SecurityConfig {
                     .requestMatchers("/error").permitAll()
                     .requestMatchers("/api/v1/languages").permitAll()
                     .requestMatchers("/api/v1/translations", "/api/v1/translations/**").permitAll()
+                    // Exported PDF files are shared by their unguessable (UUID) filename — public so a
+                    // "publish / share this book" link works without the recipient signing in.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/export/files/**").permitAll()
                     .requestMatchers(
                                 "/api/v1/languages",
                                 "/api/v1/languages/**",

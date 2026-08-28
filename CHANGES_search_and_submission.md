@@ -38,8 +38,13 @@ Only `query` is required.
 languageId, languageName, text, pronunciation, verified, notes, exampleSentence`).
 
 ### Frontend action
-- **No breaking change.** Optionally surface that pronunciation and concept name are now
-  searchable. The search box can send raw user input as-is — normalization is server-side.
+- **No breaking change** to the endpoint itself. But today the website does **not call this
+  endpoint at all** for the dictionary — it downloads every concept + translation and filters
+  in the browser. That is why "search with no category" and Bangla searches return nothing.
+  See **section 6** for the required website changes.
+- The search box can send raw user input as-is — normalization is server-side.
+- The endpoint is **public** (`permitAll` on `/api/v1/translations/**`) — do not send an auth
+  token requirement; an unauthenticated visitor must be able to search.
 
 ---
 
@@ -128,3 +133,101 @@ No schema migration required.
 
 `Translation` fields: `id, concept, language, text, pronunciation, verified, notes,
 exampleSentence, createdAt, updatedAt` — unchanged.
+
+---
+
+## 6. Website integration — make the dictionary use the real search endpoint
+
+### The problem today
+`KORO-Website` treats search as a client-side substring filter over the full concept list:
+
+| Code | What it does now |
+|---|---|
+| `src/features/dictionary/hooks.ts` → `useConceptsByCategory` | `GET /concepts` + `GET /translations` (everything), then `c.name.toLowerCase().includes(q)` — **English concept name only**, scoped to one category |
+| `src/features/search/hooks.ts` → `useGlobalSearch` | same full download, then `c.name.includes(q) || c.translations.some(t => t.text.includes(q))` — no `pronunciation`, no Unicode normalization |
+| `src/lib/api/endpoints.ts` → `translationsApi.search` | already declared, but `targetLanguageId` is **required** and it is marked `{ auth: true }` |
+
+Result: a query with no category, a Bangla query, a pronunciation query, or a source-language
+word returns "No words found".
+
+### Contract to build against
+
+`POST /api/v1/translations/search` — **public, no auth token.**
+
+Request body (only `query` required):
+```jsonc
+{
+  "query": "পান",              // raw user input; server normalizes (NFC + trim + strip ZWJ)
+  "sourceLanguageId": "<id>",   // optional
+  "targetLanguageId": "<id>"    // optional
+}
+```
+
+| `sourceLanguageId` | `targetLanguageId` | use it for |
+|---|---|---|
+| — | — | **global dictionary search** (all languages) — this is the no-category case |
+| — | set | search within one language |
+| set | set | "type a word in language A, get language B" |
+
+Matches, case-insensitively, as a substring, against: translation `text`, translation
+`pronunciation`, and the parent concept `name` / `description`.
+
+Response `200`: `TranslationResponse[]`
+```jsonc
+[
+  {
+    "id": "6a8c49ff…", "conceptId": "6a8c49fe…", "conceptName": "Tree",
+    "categoryName": "Nature & Environment",
+    "languageId": "6a8f401d…", "languageName": "Koch",
+    "text": "Pan", "pronunciation": "পান",
+    "verified": true, "notes": "…", "exampleSentence": null
+  }
+]
+```
+`""` / whitespace-only `query` → `400` with body `"Query string is empty"`.
+
+### Required changes in `KORO-Website`
+
+1. **`src/lib/api/endpoints.ts`** — loosen `translationsApi.search`:
+   ```ts
+   search: (payload: { query: string; sourceLanguageId?: string; targetLanguageId?: string }) =>
+     apiClient.post<RawTranslation[]>("/translations/search", payload), // drop { auth: true }
+   ```
+   (`RawTranslation` already matches `TranslationResponse`.)
+
+2. **New hook** `useDictionarySearch(query, opts?)` (e.g. in `src/features/search/hooks.ts`):
+   - debounce `query` ~300 ms; skip the call when trimmed `query` is empty.
+   - `translationsApi.search({ query })` for global; add `targetLanguageId` when a language
+     filter is active.
+   - **group the flat rows by `conceptId`** into `{ conceptId, conceptName, categoryName, translations: RawTranslation[] }` for card display (same shape `ConceptCard` already consumes, minus slugs — derive slugs with the existing `slugify`).
+   - `react-query` key: `["translations", "search", query, targetLanguageId ?? null]`.
+
+3. **`src/app/(public)/dictionary/[category]/page.tsx`** — when the search box has a value,
+   call `useDictionarySearch(debounced)` and then keep only rows whose `categoryName` matches
+   the current category (or show all + a "in other categories" section). When the box is empty,
+   keep the existing `useConceptsByCategory` browse list.
+
+4. **`src/features/search/hooks.ts` → `useGlobalSearch`** — replace the concept-substring
+   filter with `useDictionarySearch(q)` for the "Concepts & Translations" section. Keep the
+   existing client-side filters for the "Languages" and "Categories" sections (those aren't
+   part of this endpoint).
+
+5. Delete the stale comment *"The backend has no generic search endpoint"* in both hook files.
+
+### Admin panel (`KORO-Admin`) — approve response changed
+
+`adminApi.submissions.approve` now resolves to
+`{ submission: RawSubmission; conceptId: string; translationsSaved: string[] }`, **not**
+`RawSubmission`. Read `res.submission` where the code currently reads `res`. `translationsSaved`
+is a ready-to-display list (`["Bangla: গাছ", "English: Tree", …]`) for a success toast.
+Also handle the new `400` (plain string body) for "source language deleted" / "bn|en not configured".
+
+### Before any of this works: restart the backend
+The improvements in sections 1–4 are compiled but a running server started earlier will still
+serve the old behaviour. Rebuild and restart (`./gradlew bootRun`, or Rebuild + Rerun in the
+IDE). Quick check that the new code is live:
+```
+curl -s -X POST http://localhost:8080/api/v1/translations/search \
+  -H 'Content-Type: application/json' -d '{"query":"tri"}'
+```
+should return the Tree/English row (matched on its pronunciation `tri:`); on the old build it returns `[]`.

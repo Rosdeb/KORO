@@ -4,6 +4,7 @@ import com.koro.app.activity.entity.ActivityType;
 import com.koro.app.activity.service.ActivityLogService;
 import com.koro.app.auth.security.CustomUserDetails;
 import com.koro.app.export.dto.PdfExportRequest;
+import com.koro.app.export.dto.PdfExportResponse;
 import com.koro.app.export.entity.PdfExport;
 import com.koro.app.export.repository.PdfExportRepository;
 import com.koro.app.export.service.PdfExportService;
@@ -41,49 +42,56 @@ public class ExportController {
     @PostMapping("/pdf")
     public ResponseEntity<?> exportToPdf(@Valid @RequestBody PdfExportRequest request) {
         User user = getCurrentUser();
-        
-        PdfExport pdfExport = pdfExportService.exportCollectionToPdf(
-                user, 
-                request.getCollectionId(), 
-                request.getLanguageId()
-        );
 
-        // Log export activity
+        if (request.resolvedLanguageIds().isEmpty()) {
+            return ResponseEntity.badRequest().body("Error: at least one languageId (or languageIds) is required.");
+        }
+
+        PdfExport pdfExport = pdfExportService.exportCollectionToPdf(user, request);
+
         activityLogService.log(
-                ActivityType.EXPORT_PDF, 
-                "Exported PDF book '" + pdfExport.getFileName() + "'", 
-                pdfExport.getId(), 
-                "collectionId=" + request.getCollectionId() + ", languageId=" + request.getLanguageId()
+                ActivityType.EXPORT_PDF,
+                "Exported PDF book '" + pdfExport.getFileName() + "'",
+                pdfExport.getId(),
+                "collectionId=" + request.getCollectionId() + ", languageIds=" + request.resolvedLanguageIds()
         );
 
-        return ResponseEntity.ok(pdfExport);
+        return ResponseEntity.ok(PdfExportResponse.from(pdfExport));
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<PdfExport>> getExportHistory() {
+    public ResponseEntity<List<PdfExportResponse>> getExportHistory() {
         User user = getCurrentUser();
-        return ResponseEntity.ok(pdfExportRepository.findByUserIdOrderByCreatedAtDesc(user.getId()));
+        List<PdfExportResponse> history = pdfExportRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(PdfExportResponse::from)
+                .toList();
+        return ResponseEntity.ok(history);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getExportById(@PathVariable String id) {
         User user = getCurrentUser();
         return pdfExportRepository.findById(id)
-                .map(pdfExport -> {
+                .<ResponseEntity<?>>map(pdfExport -> {
                     if (!pdfExport.getUser().getId().equals(user.getId())) {
                         return ResponseEntity.status(403).body("Error: Forbidden access");
                     }
-                    return ResponseEntity.ok(pdfExport);
+                    return ResponseEntity.ok(PdfExportResponse.from(pdfExport));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Public (see SecurityConfig): the filename is an unguessable UUID, so this doubles as the
+    // shareable "published book" link. `inline` so it previews in the browser; add ?download=1
+    // to force a save.
     @GetMapping("/files/{filename:.+}")
-    public ResponseEntity<?> getExportFile(@PathVariable String filename) {
+    public ResponseEntity<?> getExportFile(@PathVariable String filename,
+                                           @RequestParam(required = false) boolean download) {
         Resource file = storageService.loadAsResource(filename);
+        String disposition = (download ? "attachment" : "inline") + "; filename=\"" + file.getFilename() + "\"";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.getFilename() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                 .body(file);
     }
 

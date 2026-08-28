@@ -19,6 +19,7 @@ public class CollectionItemResponse {
     private String languageName;
     private String translationText;
     private String pronunciation;
+    private String exampleSentence;
     private String notes;
     private String chapter;
     private Integer displayOrder;
@@ -34,6 +35,7 @@ public class CollectionItemResponse {
                 .languageName(item.getLanguage().getName())
                 .translationText(translation != null ? translation.getText() : null)
                 .pronunciation(translation != null ? translation.getPronunciation() : null)
+                .exampleSentence(translation != null ? translation.getExampleSentence() : null)
                 .notes(item.getNotes())
                 .chapter(item.getChapter())
                 .displayOrder(item.getDisplayOrder())

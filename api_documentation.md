@@ -48,10 +48,11 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 | `/api/v1/categories` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/concepts`, `/concepts/{id}` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/translations` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `/api/v1/translations/search` | POST | | ✅ | ✅ | ✅ | ✅ |
-| `/api/v1/collections/**` | GET/POST/PUT/DELETE | | ✅ own | ✅ own | ✅ own | ✅ own |
+| `/api/v1/translations`, `/translations/search` | GET / POST | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/collections/**` | GET/POST/PUT/PATCH/DELETE | | ✅ own | ✅ own | ✅ own | ✅ own |
 | `/api/v1/images/recognize`, `/images/history`, `/images/files/{name}` | POST/GET | | ✅ | ✅ | ✅ | ✅ |
-| `/api/v1/export/pdf`, `/export/history`, `/export/{id}`, `/export/files/{name}` | POST/GET | | ✅ own | ✅ own | ✅ own | ✅ own |
+| `/api/v1/export/pdf`, `/export/history`, `/export/{id}` | POST/GET | | ✅ own | ✅ own | ✅ own | ✅ own |
+| `/api/v1/export/files/{name}` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/submissions` | GET / POST | | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/activity`, `/activity/statistics` | GET | | ✅ own | ✅ own | ✅ own | ✅ own |
 | `/api/v1/admin/submissions/pending` | GET | | | ✅ | ✅ | ✅ |
@@ -215,11 +216,29 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 
 ---
 
-## 5. Saved Vocabulary Collections (`/api/v1/collections`)
+## 5. Saved Vocabulary Collections / "My Books" (`/api/v1/collections`)
 
-*   **URLs**: `/api/v1/collections`, `/api/v1/collections/{id}`, `/api/v1/collections/{id}/items`, `/api/v1/collections/{id}/items/{itemId}`
-*   **Methods**: `GET`, `POST`, `PUT`, `DELETE`
-*   **Access**: Authenticated, owner-only (a user can only read/modify their own collections — enforced in the controller, not just by role)
+*   **Access**: Authenticated, owner-only (enforced in the controller, not just by role).
+
+| Method | URL | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/collections` | list my books — returns `CollectionSummaryResponse[]` with `itemCount` + `chapterCount` (no `items` array) |
+| `POST` | `/api/v1/collections` | create — body `{ name, description? }`, returns `CollectionResponse` |
+| `GET` | `/api/v1/collections/{id}` | full book — `CollectionResponse` with `items` sorted by `(chapter, displayOrder, name)` and the effective `chapterOrder` |
+| `PUT` | `/api/v1/collections/{id}` | rename / re-describe — body `{ name, description? }` |
+| `DELETE` | `/api/v1/collections/{id}` | delete book + its items |
+| `POST` | `/api/v1/collections/{id}/items` | add one word — body `{ conceptId, languageId, chapter?, notes?, displayOrder? }`. `displayOrder` defaults to end-of-chapter. **`409`** if that concept+language is already in the book |
+| `POST` | `/api/v1/collections/{id}/items/bulk` | add many — body `{ languageId, conceptIds[], chapter?, notes? }`, returns `{ added: CollectionItemResponse[], skipped: [{conceptId, reason}] }` (always `200`) |
+| `PATCH` | `/api/v1/collections/{id}/items/{itemId}` | partial update — body any of `{ chapter, notes, displayOrder, languageId }`. `409` if the language change would collide with another item |
+| `PUT` | `/api/v1/collections/{id}/chapters` | bulk rename + reorder chapters — body `{ chapters: [{ from, to? }] }`; list order becomes the book's chapter order (stored, honoured by PDF) |
+| `DELETE` | `/api/v1/collections/{id}/items/{itemId}` | remove one word |
+
+`CollectionSummaryResponse`: `id, name, description, itemCount, chapterCount, createdAt, updatedAt`.
+`CollectionResponse`: `id, name, description, chapterOrder[], createdAt, updatedAt, items[]`.
+`CollectionItemResponse`: `id, conceptId, conceptName, categoryName, languageId, languageName, translationText, pronunciation, exampleSentence, notes, chapter, displayOrder, createdAt`.
+
+> **Changed:** `GET /collections` used to return raw `Collection` entities with no counts. `POST`/`PUT` used to
+> return the raw entity (which leaked the owner's password hash) — they now return `CollectionResponse`.
 
 ---
 
@@ -313,7 +332,25 @@ A submission is a full dictionary entry — a word in its **source language**, p
 ## 8. PDF Generation API (`/api/v1/export`)
 
 *   **URLs**: `/api/v1/export/pdf` (`POST`), `/api/v1/export/history` (`GET`), `/api/v1/export/{id}` (`GET`, owner-only), `/api/v1/export/files/{filename}` (`GET`)
-*   **Access**: Authenticated (any role)
+*   **Access**: authenticated, **except `GET /files/{filename}` which is public** — the filename is an unguessable UUID, so the URL doubles as a shareable "published book" link. Served `inline` (previews in browser); add `?download=1` to force a save.
+
+### Generate a book PDF
+*   **URL**: `/api/v1/export/pdf` · **Method**: `POST`
+*   **Request Body**:
+    ```jsonc
+    {
+      "collectionId": "…",
+      "languageIds": ["<chakma>", "<bn>", "<en>"],  // one column per language, in this order
+      "languageId": "<bn>",                          // legacy single-language alias, still works
+      "headwordLanguageId": "<chakma>",              // optional — which language leads each entry (default: first)
+      "includeExampleSentences": true                // optional, default true
+    }
+    ```
+    At least one of `languageIds` / `languageId` is required (`400` otherwise).
+*   **Response (200)**: `PdfExportResponse` — `{ id, collectionId, collectionName, fileName, fileUrl, fileSize, createdAt }`.
+    > **Changed:** was the raw `PdfExport` entity (which leaked the owner's password hash via nested `user`). `GET /history` and `GET /{id}` return the same DTO now.
+*   Chapters print in the book's `chapterOrder`; entries within a chapter follow `displayOrder` then name; each entry shows the headword, one line per language (`text (pronunciation)`), example sentences, then the personal note.
+*   **Fonts:** Bangla/Chakma need TTF files in `src/main/resources/fonts/` (see that folder's README). Without them those scripts render as blank boxes and a startup warning is logged; Latin is unaffected.
 
 ---
 
