@@ -200,6 +200,12 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 ### List / Search Translations
 *   **URL**: `/api/v1/translations` (`GET`), `/api/v1/translations/search` (`POST`)
 *   **Access**: `GET` is public; `POST /search` requires authentication (any role)
+*   **Search request body**: `{ "query": "...", "sourceLanguageId": "...", "targetLanguageId": "..." }` — only `query` is required.
+    *   `sourceLanguageId` + `targetLanguageId`: cross-language lookup — match `query` in the source language, return the matching concepts' entries in the target language.
+    *   `targetLanguageId` only: search within that one language.
+    *   neither: global search across every language.
+*   **Matching**: `query` is matched (case-insensitively, as a substring) against the translation text, its pronunciation, and the concept name/description, so both English (`water`, `wa`) and Bangla (`পানি`, `পান`) queries work, as does the romanized pronunciation (`pani`).
+*   **Unicode**: the query and all stored text are Unicode-normalized to NFC with zero-width joiners stripped, so Bangla words spelled with canonically-equivalent code point sequences (e.g. a precomposed vs. decomposed `ৌ`) still match. Existing rows are normalized once on startup.
 
 ### Update Translation — Admin or Moderator
 *   **URL**: `/api/v1/admin/translations/{id}`
@@ -278,9 +284,24 @@ A submission is a full dictionary entry — a word in its **source language**, p
     { "reviewerNote": "Verified by community linguist." }
     ```
     On approval: the submission is marked `APPROVED`, and its data is published into the existing dictionary tables —
-    1. Find (by English name, case-insensitive) or create a `Concept` for `englishTranslation`, tagged with the submission's `category`.
-    2. Upsert the `Translation` row for the source language (`sourceWord`, `pronunciation`, `note`, `exampleSentence`), and for Bangla/English (skipped if the source language *is* Bangla or English, to avoid overwriting the same row twice).
-    3. The word is now returned by the existing `GET /api/v1/translations`, `POST /api/v1/translations/search`, and image-recognition matching — no new dictionary-read endpoint was needed.
+    1. Find (by English name, case-insensitive, after Unicode/whitespace normalization) or create a `Concept` for `englishTranslation`, tagged with the submission's `category`.
+    2. Upsert three `Translation` rows under that concept:
+        *   **source language** — `sourceWord`, plus `pronunciation`, `note`, `exampleSentence`.
+        *   **Bangla** — `banglaTranslation`, plus `note` and `exampleSentence` (these describe the concept, so they are copied here too; `pronunciation` is not, it belongs to the source word).
+        *   **English** — `englishTranslation`, plus `note` and `exampleSentence`.
+        The Bangla or English row is skipped only when the source language *is* Bangla or English (so the same row is not written twice). A blank translation never creates a row.
+    3. The word is now returned by `GET /api/v1/translations`, `POST /api/v1/translations/search`, and image-recognition matching.
+*   **Approve — Response (200 OK)** — an object, **not the bare submission** (admin UI note):
+    ```json
+    {
+      "submission": { "id": "...", "status": "APPROVED", "reviewedAt": "...", "...": "..." },
+      "conceptId": "6a8ef6eb21d2767e52a00c25",
+      "translationsSaved": ["Chakma: বান", "Bangla: গাছ", "English: Tree"]
+    }
+    ```
+*   **Approve — Response (400)** with a message string, instead of a `500`, when the submission cannot be published:
+    *   the submission's source language was deleted (`"...source language no longer exists..."`).
+    *   the `bn` or `en` language is not configured (`"...Bangla (code 'bn') and English (code 'en')..."`).
 *   **Reject — Request Body** (`rejectionReason` required):
     ```json
     { "rejectionReason": "Duplicate of an existing entry.", "reviewerNote": "See submission #123." }

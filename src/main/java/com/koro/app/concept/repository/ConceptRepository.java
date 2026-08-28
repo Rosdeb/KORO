@@ -10,4 +10,5 @@ import java.util.Optional;
 public interface ConceptRepository extends MongoRepository<Concept, String> {
     Optional<Concept> findByNameIgnoreCase(String name);
     List<Concept> findByCategoryId(String categoryId);
+    List<Concept> findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(String name, String description);
 }

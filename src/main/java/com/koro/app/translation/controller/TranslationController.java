@@ -3,6 +3,7 @@ package com.koro.app.translation.controller;
 import com.koro.app.activity.entity.ActivityType;
 import com.koro.app.activity.service.ActivityLogService;
 import com.koro.app.auth.dto.MessageResponse;
+import com.koro.app.common.TextNormalizer;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.ConceptRepository;
 import com.koro.app.language.entity.Language;
@@ -15,8 +16,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -61,50 +65,109 @@ public class TranslationController {
 
     @PostMapping("/translations/search")
     public ResponseEntity<?> searchTranslations(@RequestBody TranslationSearchRequest request) {
-        if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
+        String query = TextNormalizer.normalize(request.getQuery());
+        if (query == null || query.isEmpty()) {
             return ResponseEntity.badRequest().body("Query string is empty");
         }
 
-        List<Translation> results;
+        // Try the query both normalized and exactly as typed. Stored rows added before
+        // normalization was in place, or a client that already sends NFC, are still matched.
+        String rawQuery = request.getQuery().trim();
+        Set<String> variants = new LinkedHashSet<>();
+        variants.add(query);
+        if (!rawQuery.isEmpty()) {
+            variants.add(rawQuery);
+        }
 
-        if (request.getSourceLanguageId() != null && request.getTargetLanguageId() != null) {
-            // Programmatic cross-language translation in MongoDB
-            List<Translation> sourceTranslations = translationRepository.findByLanguageIdAndTextContainingIgnoreCase(
-                    request.getSourceLanguageId(), 
-                    request.getQuery()
-            );
-            List<String> conceptIds = sourceTranslations.stream()
-                    .map(t -> t.getConcept().getId())
-                    .collect(Collectors.toList());
-            
-            results = new ArrayList<>();
-            for (String conceptId : conceptIds) {
-                translationRepository.findByConceptIdAndLanguageId(conceptId, request.getTargetLanguageId())
-                        .ifPresent(results::add);
+        String sourceLanguageId = request.getSourceLanguageId();
+        String targetLanguageId = request.getTargetLanguageId();
+
+        // De-duplicate matches by translation id while keeping the order they were found in.
+        Map<String, Translation> matches = new LinkedHashMap<>();
+
+        if (sourceLanguageId != null && targetLanguageId != null) {
+            // Cross-language: match a word in the source language, then return the
+            // corresponding entry in the target language for each concept found.
+            Set<String> conceptIds = new LinkedHashSet<>();
+            for (String variant : variants) {
+                collectConceptIdsFromTranslations(conceptIds,
+                        translationRepository.findByLanguageIdAndTextContainingIgnoreCase(sourceLanguageId, variant));
+                collectConceptIdsFromTranslations(conceptIds,
+                        translationRepository.findByLanguageIdAndPronunciationContainingIgnoreCase(sourceLanguageId, variant));
             }
-        } else if (request.getTargetLanguageId() != null) {
-            // search translations in target language matching text
-            results = translationRepository.findByLanguageIdAndTextContainingIgnoreCase(
-                    request.getTargetLanguageId(), 
-                    request.getQuery()
-            );
+            for (String conceptId : conceptIds) {
+                translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
+                        .ifPresent(t -> putMatch(matches, t));
+            }
+        } else if (targetLanguageId != null) {
+            // Search within a single language, across the word, its pronunciation and its concept.
+            Set<String> conceptIds = new LinkedHashSet<>();
+            for (String variant : variants) {
+                addMatches(matches,
+                        translationRepository.findByLanguageIdAndTextContainingIgnoreCase(targetLanguageId, variant));
+                addMatches(matches,
+                        translationRepository.findByLanguageIdAndPronunciationContainingIgnoreCase(targetLanguageId, variant));
+                collectConceptIdsFromConcepts(conceptIds, conceptRepository
+                        .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(variant, variant));
+            }
+            for (String conceptId : conceptIds) {
+                translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
+                        .ifPresent(t -> putMatch(matches, t));
+            }
         } else {
-            // global query matching translation text
-            results = translationRepository.findByTextContainingIgnoreCase(request.getQuery());
+            // Global search across every language.
+            Set<String> conceptIds = new LinkedHashSet<>();
+            for (String variant : variants) {
+                addMatches(matches, translationRepository.findByTextContainingIgnoreCase(variant));
+                addMatches(matches, translationRepository.findByPronunciationContainingIgnoreCase(variant));
+                collectConceptIdsFromConcepts(conceptIds, conceptRepository
+                        .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(variant, variant));
+            }
+            if (!conceptIds.isEmpty()) {
+                addMatches(matches, translationRepository.findByConceptIdIn(conceptIds));
+            }
         }
 
         // Log translation activity
         activityLogService.log(
-                ActivityType.TRANSLATION, 
-                "Searched translations for: " + request.getQuery(), 
-                null, 
-                "sourceLang=" + request.getSourceLanguageId() + ", targetLang=" + request.getTargetLanguageId()
+                ActivityType.TRANSLATION,
+                "Searched translations for: " + query,
+                null,
+                "sourceLang=" + sourceLanguageId + ", targetLang=" + targetLanguageId
         );
 
-        return ResponseEntity.ok(results.stream()
+        return ResponseEntity.ok(matches.values().stream()
                 .filter(t -> t.getConcept() != null && t.getLanguage() != null)
                 .map(TranslationResponse::fromTranslation)
                 .collect(Collectors.toList()));
+    }
+
+    private static void addMatches(Map<String, Translation> sink, List<Translation> found) {
+        for (Translation t : found) {
+            putMatch(sink, t);
+        }
+    }
+
+    private static void putMatch(Map<String, Translation> sink, Translation t) {
+        if (t.getId() != null) {
+            sink.putIfAbsent(t.getId(), t);
+        }
+    }
+
+    private static void collectConceptIdsFromTranslations(Set<String> sink, List<Translation> found) {
+        for (Translation t : found) {
+            if (t.getConcept() != null && t.getConcept().getId() != null) {
+                sink.add(t.getConcept().getId());
+            }
+        }
+    }
+
+    private static void collectConceptIdsFromConcepts(Set<String> sink, List<Concept> found) {
+        for (Concept c : found) {
+            if (c.getId() != null) {
+                sink.add(c.getId());
+            }
+        }
     }
 
     @PostMapping("/admin/translations")
@@ -121,8 +184,8 @@ public class TranslationController {
 
         translation.setConcept(concept);
         translation.setLanguage(language);
-        translation.setText(request.getText());
-        translation.setPronunciation(request.getPronunciation());
+        translation.setText(TextNormalizer.normalize(request.getText()));
+        translation.setPronunciation(TextNormalizer.normalize(request.getPronunciation()));
         translation.setNotes(request.getNotes());
         translation.setVerified(true); // admin entered is verified by default
 
@@ -147,8 +210,8 @@ public class TranslationController {
                                 .orElseThrow(() -> new RuntimeException("Language not found"));
                         translation.setLanguage(language);
                     }
-                    if (request.getText() != null) translation.setText(request.getText());
-                    if (request.getPronunciation() != null) translation.setPronunciation(request.getPronunciation());
+                    if (request.getText() != null) translation.setText(TextNormalizer.normalize(request.getText()));
+                    if (request.getPronunciation() != null) translation.setPronunciation(TextNormalizer.normalize(request.getPronunciation()));
                     if (request.getNotes() != null) translation.setNotes(request.getNotes());
 
                     Translation saved = translationRepository.save(translation);

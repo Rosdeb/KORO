@@ -3,6 +3,7 @@ package com.koro.app.submission.controller;
 import com.koro.app.activity.entity.ActivityType;
 import com.koro.app.activity.service.ActivityLogService;
 import com.koro.app.auth.security.CustomUserDetails;
+import com.koro.app.common.TextNormalizer;
 import com.koro.app.concept.entity.Category;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.CategoryRepository;
@@ -25,7 +26,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -65,7 +70,7 @@ public class SubmissionController {
         Language sourceLanguage = languageRepository.findById(request.getSourceLanguageId())
                 .orElseThrow(() -> new RuntimeException("Source language not found"));
 
-        String sourceWord = request.getSourceWord().trim();
+        String sourceWord = TextNormalizer.normalize(request.getSourceWord());
 
         boolean existsInDictionary = !translationRepository
                 .findByLanguageIdAndTextIgnoreCase(sourceLanguage.getId(), sourceWord).isEmpty();
@@ -134,30 +139,52 @@ public class SubmissionController {
     public ResponseEntity<?> approveSubmission(@PathVariable String id, @RequestBody(required = false) SubmissionReviewRequest request) {
         User reviewer = getCurrentUser();
         return submissionRepository.findById(id)
-                .map(submission -> {
+                .<ResponseEntity<?>>map(submission -> {
                     if (submission.getStatus() != SubmissionStatus.PENDING) {
                         return ResponseEntity.badRequest().body("Error: Submission is already resolved.");
                     }
 
-                    Language bangla = languageRepository.findByCode(BANGLA_CODE)
-                            .orElseThrow(() -> new RuntimeException("Bangla language (code 'bn') is not configured"));
-                    Language english = languageRepository.findByCode(ENGLISH_CODE)
-                            .orElseThrow(() -> new RuntimeException("English language (code 'en') is not configured"));
+                    Language sourceLanguage = submission.getSourceLanguage();
+                    if (sourceLanguage == null || sourceLanguage.getId() == null) {
+                        return ResponseEntity.badRequest().body(
+                                "Error: The submission's source language no longer exists. Recreate that language or reject this submission.");
+                    }
 
-                    Concept concept = conceptRepository.findByNameIgnoreCase(submission.getEnglishTranslation())
+                    Optional<Language> bangla = languageRepository.findByCode(BANGLA_CODE);
+                    Optional<Language> english = languageRepository.findByCode(ENGLISH_CODE);
+                    if (bangla.isEmpty() || english.isEmpty()) {
+                        return ResponseEntity.badRequest().body(
+                                "Error: Both Bangla (code 'bn') and English (code 'en') languages must be configured before a submission can be approved.");
+                    }
+
+                    // The English translation is also the concept's canonical name. Normalizing it
+                    // keeps "How are you" and "How are you " from becoming two separate concepts.
+                    String conceptName = TextNormalizer.normalize(submission.getEnglishTranslation());
+                    Concept concept = conceptRepository.findByNameIgnoreCase(conceptName)
                             .orElseGet(() -> conceptRepository.save(Concept.builder()
-                                    .name(submission.getEnglishTranslation())
+                                    .name(conceptName)
                                     .category(submission.getCategory())
                                     .build()));
 
-                    upsertTranslation(concept, submission.getSourceLanguage(), submission.getSourceWord(),
-                            submission.getPronunciation(), submission.getNotes(), submission.getExampleSentence());
+                    // Always create/refresh three dictionary rows under this one concept:
+                    // the source word, its Bangla meaning and its English meaning. This is what
+                    // makes the word findable by a language-filtered search afterwards.
+                    //
+                    // The example sentence and reviewer notes describe the concept, not just the
+                    // source word, so they are copied onto all three rows. The pronunciation is the
+                    // phonetics of the source word specifically, so it stays only on the source row.
+                    String notes = submission.getNotes();
+                    String exampleSentence = submission.getExampleSentence();
 
-                    if (!submission.getSourceLanguage().getId().equals(bangla.getId())) {
-                        upsertTranslation(concept, bangla, submission.getBanglaTranslation(), null, null, null);
+                    List<String> saved = new ArrayList<>();
+                    recordSaved(saved, upsertTranslation(concept, sourceLanguage, submission.getSourceWord(),
+                            submission.getPronunciation(), notes, exampleSentence));
+
+                    if (!sourceLanguage.getId().equals(bangla.get().getId())) {
+                        recordSaved(saved, upsertTranslation(concept, bangla.get(), submission.getBanglaTranslation(), null, notes, exampleSentence));
                     }
-                    if (!submission.getSourceLanguage().getId().equals(english.getId())) {
-                        upsertTranslation(concept, english, submission.getEnglishTranslation(), null, null, null);
+                    if (!sourceLanguage.getId().equals(english.get().getId())) {
+                        recordSaved(saved, upsertTranslation(concept, english.get(), submission.getEnglishTranslation(), null, notes, exampleSentence));
                     }
 
                     submission.setStatus(SubmissionStatus.APPROVED);
@@ -168,11 +195,17 @@ public class SubmissionController {
                     }
                     submissionRepository.save(submission);
 
+                    User submitter = submission.getSubmittedBy();
                     activityLogService.log(ActivityType.ADD_VOCABULARY,
-                            "Approved dictionary entry '" + submission.getSourceWord() + "' from User: " + submission.getSubmittedBy().getEmail(),
+                            "Approved dictionary entry '" + submission.getSourceWord() + "'"
+                                    + (submitter != null ? " from User: " + submitter.getEmail() : ""),
                             id, null);
 
-                    return ResponseEntity.ok(submission);
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("submission", submission);
+                    body.put("conceptId", concept.getId());
+                    body.put("translationsSaved", saved);
+                    return ResponseEntity.ok(body);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -209,19 +242,38 @@ public class SubmissionController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    private void upsertTranslation(Concept concept, Language language, String text, String pronunciation, String notes, String exampleSentence) {
+    /**
+     * Creates the translation row for {@code concept} in {@code language}, or updates it if one
+     * already exists. Returns {@code null} (creating nothing) when there is no language or no
+     * usable text, so a blank Bangla/English field can never produce a language-less or empty row.
+     */
+    private Translation upsertTranslation(Concept concept, Language language, String text, String pronunciation, String notes, String exampleSentence) {
+        if (language == null || language.getId() == null) {
+            return null;
+        }
+        String normalizedText = TextNormalizer.normalize(text);
+        if (normalizedText == null || normalizedText.isEmpty()) {
+            return null;
+        }
+
         Translation translation = translationRepository.findByConceptIdAndLanguageId(concept.getId(), language.getId())
-                .orElse(new Translation());
+                .orElseGet(Translation::new);
 
         translation.setConcept(concept);
         translation.setLanguage(language);
-        translation.setText(text);
-        if (pronunciation != null) translation.setPronunciation(pronunciation);
+        translation.setText(normalizedText);
+        if (pronunciation != null) translation.setPronunciation(TextNormalizer.normalize(pronunciation));
         if (notes != null) translation.setNotes(notes);
         if (exampleSentence != null) translation.setExampleSentence(exampleSentence);
         translation.setVerified(true);
 
-        translationRepository.save(translation);
+        return translationRepository.save(translation);
+    }
+
+    private static void recordSaved(List<String> sink, Translation translation) {
+        if (translation != null && translation.getLanguage() != null) {
+            sink.add(translation.getLanguage().getName() + ": " + translation.getText());
+        }
     }
 
     private User getCurrentUser() {

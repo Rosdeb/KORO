@@ -1,5 +1,6 @@
 package com.koro.app.config;
 
+import com.koro.app.common.TextNormalizer;
 import com.koro.app.concept.entity.Category;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.CategoryRepository;
@@ -158,6 +159,51 @@ public class DatabaseInitializer implements CommandLineRunner {
             translationRepository.save(Translation.builder().concept(house).language(english).text("House").pronunciation("haʊs").verified(true).build());
             translationRepository.save(Translation.builder().concept(house).language(bangla).text("ঘর").pronunciation("ghor").verified(true).build());
             translationRepository.save(Translation.builder().concept(house).language(chakma).text("ঘর").pronunciation("ghor").verified(true).build());
+        }
+
+        normalizeExistingTranslations();
+    }
+
+    /**
+     * Brings every stored translation to the same Unicode form the search endpoint now uses.
+     * Without this, rows written before {@link TextNormalizer} was introduced stay in whatever
+     * form the client happened to send and Bangla searches against them keep missing.
+     */
+    private void normalizeExistingTranslations() {
+        int fixed = 0;
+        int broken = 0;
+        for (Translation translation : translationRepository.findAll()) {
+            // Rows missing a language or concept reference (e.g. left behind by an older code
+            // path, or because the referenced document was later deleted) are silently excluded
+            // from every search because the endpoints filter on language != null && concept != null.
+            if (translation.getLanguage() == null || translation.getConcept() == null) {
+                broken++;
+                logger.warn("Translation {} (text='{}') has a missing language or concept reference and will not appear in search results",
+                        translation.getId(), translation.getText());
+            }
+
+            String normalizedText = TextNormalizer.normalize(translation.getText());
+            String normalizedPronunciation = TextNormalizer.normalize(translation.getPronunciation());
+
+            boolean changed = false;
+            if (normalizedText != null && !normalizedText.equals(translation.getText())) {
+                translation.setText(normalizedText);
+                changed = true;
+            }
+            if (normalizedPronunciation != null && !normalizedPronunciation.equals(translation.getPronunciation())) {
+                translation.setPronunciation(normalizedPronunciation);
+                changed = true;
+            }
+            if (changed) {
+                translationRepository.save(translation);
+                fixed++;
+            }
+        }
+        if (fixed > 0) {
+            logger.info("Normalized Unicode text for {} translation(s)", fixed);
+        }
+        if (broken > 0) {
+            logger.warn("{} translation(s) are missing a language/concept reference - fix or delete them so they become searchable", broken);
         }
     }
 }
