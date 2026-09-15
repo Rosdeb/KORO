@@ -64,7 +64,9 @@ public class SecurityConfig {
                 "http://localhost:5173",
                 "http://localhost:3030",
                 "http://localhost:8080",
-                "https://koro-website.rosdekoc12.workers.dev"
+                "https://koro-website.rosdekoc12.workers.dev",
+                "https://korot.site",
+                "https://www.korot.site"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
