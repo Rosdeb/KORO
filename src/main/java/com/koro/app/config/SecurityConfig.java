@@ -66,6 +66,8 @@ public class SecurityConfig {
                 "http://localhost:8080",
                 "https://koro-website.rosdekoc12.workers.dev",
                 "https://korot.site",
+                "http://korot.site",
+                "koro.site",
                 "https://www.korot.site",
                 "https://admin.korot.site"
         ));
