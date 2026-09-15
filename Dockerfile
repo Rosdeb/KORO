@@ -6,6 +6,7 @@ COPY . .
 
 RUN chmod +x ./gradlew
 RUN ./gradlew clean build -x test
+RUN rm -f build/libs/*-plain.jar
 
 EXPOSE 10000
 
