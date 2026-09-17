@@ -187,80 +187,117 @@ public class SubmissionController {
         return ResponseEntity.ok(submissionRepository.findByReviewedByIdOrderByReviewedAtDesc(reviewer.getId()));
     }
 
+    @PostMapping("/admin/submissions/approve-all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> approveAllPendingSubmissions() {
+        User reviewer = getCurrentUser();
+        if (reviewer == null) {
+            return ResponseEntity.status(401).body("Error: Authentication required.");
+        }
+
+        List<TranslationSubmission> pendingSubmissions = submissionRepository.findByStatus(SubmissionStatus.PENDING);
+        List<String> approvedIds = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
+
+        for (TranslationSubmission submission : pendingSubmissions) {
+            ResponseEntity<?> result = approveSubmissionInternal(submission, reviewer, null);
+            if (result.getStatusCode().is2xxSuccessful()) {
+                approvedIds.add(submission.getId());
+            } else {
+                failed.add(submission.getId() + ": " + result.getBody());
+            }
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("approvedCount", approvedIds.size());
+        response.put("approvedIds", approvedIds);
+        response.put("message", "Approved " + approvedIds.size() + " pending submissions.");
+        if (!failed.isEmpty()) {
+            response.put("failed", failed);
+        }
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/admin/submissions/{id}/approve")
     @PreAuthorize("hasAnyRole('ADMIN', 'LANGUAGE_REVIEWER', 'MODERATOR')")
     public ResponseEntity<?> approveSubmission(@PathVariable String id, @RequestBody(required = false) SubmissionReviewRequest request) {
         User reviewer = getCurrentUser();
         return submissionRepository.findById(id)
-                .<ResponseEntity<?>>map(submission -> {
-                    if (submission.getStatus() != SubmissionStatus.PENDING) {
-                        return ResponseEntity.badRequest().body("Error: Submission is already resolved.");
-                    }
-
-                    Language sourceLanguage = submission.getSourceLanguage();
-                    if (sourceLanguage == null || sourceLanguage.getId() == null) {
-                        return ResponseEntity.badRequest().body(
-                                "Error: The submission's source language no longer exists. Recreate that language or reject this submission.");
-                    }
-
-                    Optional<Language> bangla = languageRepository.findByCode(BANGLA_CODE);
-                    Optional<Language> english = languageRepository.findByCode(ENGLISH_CODE);
-                    if (bangla.isEmpty() || english.isEmpty()) {
-                        return ResponseEntity.badRequest().body(
-                                "Error: Both Bangla (code 'bn') and English (code 'en') languages must be configured before a submission can be approved.");
-                    }
-
-                    // The English translation is also the concept's canonical name. Normalizing it
-                    // keeps "How are you" and "How are you " from becoming two separate concepts.
-                    String conceptName = TextNormalizer.normalize(submission.getEnglishTranslation());
-                    Concept concept = conceptRepository.findByNameIgnoreCase(conceptName)
-                            .orElseGet(() -> conceptRepository.save(Concept.builder()
-                                    .name(conceptName)
-                                    .category(submission.getCategory())
-                                    .build()));
-
-                    // Always create/refresh three dictionary rows under this one concept:
-                    // the source word, its Bangla meaning and its English meaning. This is what
-                    // makes the word findable by a language-filtered search afterwards.
-                    //
-                    // The example sentence and reviewer notes describe the concept, not just the
-                    // source word, so they are copied onto all three rows. The pronunciation is the
-                    // phonetics of the source word specifically, so it stays only on the source row.
-                    String notes = submission.getNotes();
-                    String exampleSentence = submission.getExampleSentence();
-
-                    List<String> saved = new ArrayList<>();
-                    recordSaved(saved, upsertTranslation(concept, sourceLanguage, submission.getSourceWord(),
-                            submission.getPronunciation(), notes, exampleSentence));
-
-                    if (!sourceLanguage.getId().equals(bangla.get().getId())) {
-                        recordSaved(saved, upsertTranslation(concept, bangla.get(), submission.getBanglaTranslation(), null, notes, exampleSentence));
-                    }
-                    if (!sourceLanguage.getId().equals(english.get().getId())) {
-                        recordSaved(saved, upsertTranslation(concept, english.get(), submission.getEnglishTranslation(), null, notes, exampleSentence));
-                    }
-
-                    submission.setStatus(SubmissionStatus.APPROVED);
-                    submission.setReviewedBy(reviewer);
-                    submission.setReviewedAt(LocalDateTime.now());
-                    if (request != null && request.getReviewerNote() != null) {
-                        submission.setReviewerNote(request.getReviewerNote());
-                    }
-                    submissionRepository.save(submission);
-
-                    User submitter = submission.getSubmittedBy();
-                    activityLogService.log(ActivityType.ADD_VOCABULARY,
-                            "Approved dictionary entry '" + submission.getSourceWord() + "'"
-                                    + (submitter != null ? " from User: " + submitter.getEmail() : ""),
-                            id, null);
-
-                    Map<String, Object> body = new LinkedHashMap<>();
-                    body.put("submission", submission);
-                    body.put("conceptId", concept.getId());
-                    body.put("translationsSaved", saved);
-                    return ResponseEntity.ok(body);
-                })
+                .<ResponseEntity<?>>map(submission -> approveSubmissionInternal(submission, reviewer, request))
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private ResponseEntity<?> approveSubmissionInternal(TranslationSubmission submission, User reviewer, SubmissionReviewRequest request) {
+        if (submission.getStatus() != SubmissionStatus.PENDING) {
+            return ResponseEntity.badRequest().body("Error: Submission is already resolved.");
+        }
+
+        if (reviewer == null) {
+            return ResponseEntity.status(401).body("Error: Authentication required.");
+        }
+
+        Language sourceLanguage = submission.getSourceLanguage();
+        if (sourceLanguage == null || sourceLanguage.getId() == null) {
+            return ResponseEntity.badRequest().body(
+                    "Error: The submission's source language no longer exists. Recreate that language or reject this submission.");
+        }
+
+        Optional<Language> bangla = languageRepository.findByCode(BANGLA_CODE);
+        Optional<Language> english = languageRepository.findByCode(ENGLISH_CODE);
+        if (bangla.isEmpty() || english.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    "Error: Both Bangla (code 'bn') and English (code 'en') languages must be configured before a submission can be approved.");
+        }
+
+        // The English translation is also the concept's canonical name. Normalizing it
+        // keeps "How are you" and "How are you " from becoming two separate concepts.
+        String conceptName = TextNormalizer.normalize(submission.getEnglishTranslation());
+        Concept concept = conceptRepository.findByNameIgnoreCase(conceptName)
+                .orElseGet(() -> conceptRepository.save(Concept.builder()
+                        .name(conceptName)
+                        .category(submission.getCategory())
+                        .build()));
+
+        // Always create/refresh three dictionary rows under this one concept:
+        // the source word, its Bangla meaning and its English meaning. This is what
+        // makes the word findable by a language-filtered search afterwards.
+        //
+        // The example sentence and reviewer notes describe the concept, not just the
+        // source word, so they are copied onto all three rows. The pronunciation is the
+        // phonetics of the source word specifically, so it stays only on the source row.
+        String notes = submission.getNotes();
+        String exampleSentence = submission.getExampleSentence();
+
+        List<String> saved = new ArrayList<>();
+        recordSaved(saved, upsertTranslation(concept, sourceLanguage, submission.getSourceWord(),
+                submission.getPronunciation(), notes, exampleSentence));
+
+        if (!sourceLanguage.getId().equals(bangla.get().getId())) {
+            recordSaved(saved, upsertTranslation(concept, bangla.get(), submission.getBanglaTranslation(), null, notes, exampleSentence));
+        }
+        if (!sourceLanguage.getId().equals(english.get().getId())) {
+            recordSaved(saved, upsertTranslation(concept, english.get(), submission.getEnglishTranslation(), null, notes, exampleSentence));
+        }
+
+        submission.setStatus(SubmissionStatus.APPROVED);
+        submission.setReviewedBy(reviewer);
+        submission.setReviewedAt(LocalDateTime.now());
+        if (request != null && request.getReviewerNote() != null) {
+            submission.setReviewerNote(request.getReviewerNote());
+        }
+        submissionRepository.save(submission);
+
+        User submitter = submission.getSubmittedBy();
+        activityLogService.log(ActivityType.ADD_VOCABULARY,
+                "Approved dictionary entry '" + submission.getSourceWord() + "'"
+                        + (submitter != null ? " from User: " + submitter.getEmail() : ""),
+                submission.getId(), null);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("submission", submission);
+        body.put("conceptId", concept.getId());
+        body.put("translationsSaved", saved);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/admin/submissions/{id}/reject")
