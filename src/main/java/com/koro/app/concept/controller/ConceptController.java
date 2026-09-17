@@ -94,8 +94,6 @@ public class ConceptController {
             item.put("referenceImage", concept.getReferenceImage());
             item.put("categoryId", concept.getCategory() != null ? concept.getCategory().getId() : null);
             item.put("categoryName", concept.getCategory() != null ? concept.getCategory().getName() : null);
-            item.put("createdAt", concept.getCreatedAt());
-            item.put("updatedAt", concept.getUpdatedAt());
             content.add(item);
         }
 
