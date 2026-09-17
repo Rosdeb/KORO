@@ -7,10 +7,17 @@ import com.koro.app.concept.repository.CategoryRepository;
 import com.koro.app.concept.repository.ConceptRepository;
 import com.koro.app.translation.repository.TranslationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -65,11 +72,42 @@ public class ConceptController {
 
     // --- Concept APIs ---
     @GetMapping("/concepts")
-    public ResponseEntity<List<Concept>> getAllConcepts(@RequestParam(required = false) String categoryId) {
-        if (categoryId != null) {
-            return ResponseEntity.ok(conceptRepository.findByCategoryId(categoryId));
+    public ResponseEntity<?> getAllConcepts(
+            @RequestParam(required = false) String categoryId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.ASC, "name"));
+
+        Page<Concept> conceptPage;
+        if (categoryId != null && !categoryId.isBlank()) {
+            conceptPage = conceptRepository.findByCategoryId(categoryId, pageable);
+        } else {
+            conceptPage = conceptRepository.findAll(pageable);
         }
-        return ResponseEntity.ok(conceptRepository.findAll());
+
+        List<Map<String, Object>> content = new ArrayList<>();
+        for (Concept concept : conceptPage.getContent()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", concept.getId());
+            item.put("name", concept.getName());
+            item.put("description", concept.getDescription());
+            item.put("referenceImage", concept.getReferenceImage());
+            item.put("categoryId", concept.getCategory() != null ? concept.getCategory().getId() : null);
+            item.put("categoryName", concept.getCategory() != null ? concept.getCategory().getName() : null);
+            item.put("createdAt", concept.getCreatedAt());
+            item.put("updatedAt", concept.getUpdatedAt());
+            content.add(item);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("content", content);
+        response.put("page", conceptPage.getNumber());
+        response.put("size", conceptPage.getSize());
+        response.put("totalElements", conceptPage.getTotalElements());
+        response.put("totalPages", conceptPage.getTotalPages());
+        response.put("hasNext", conceptPage.hasNext());
+        response.put("hasPrevious", conceptPage.hasPrevious());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/concepts/{id}")
