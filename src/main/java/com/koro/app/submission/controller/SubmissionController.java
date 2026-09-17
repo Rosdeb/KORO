@@ -21,6 +21,10 @@ import com.koro.app.user.entity.User;
 import com.koro.app.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -159,16 +163,28 @@ public class SubmissionController {
     }
 
     @GetMapping("/submissions")
-    public ResponseEntity<List<TranslationSubmission>> getMySubmissions() {
+    public ResponseEntity<?> getMySubmissions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         User user = getCurrentUser();
-        return ResponseEntity.ok(submissionRepository.findBySubmittedById(user.getId()));
+        if (user == null) {
+            return ResponseEntity.status(401).body("Error: Authentication required.");
+        }
+
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<TranslationSubmission> submissionPage = submissionRepository.findBySubmittedById(user.getId(), pageable);
+        return ResponseEntity.ok(buildSubmissionPageResponse(submissionPage));
     }
 
     // --- Admin / Reviewer Submissions review endpoints ---
     @GetMapping("/admin/submissions/pending")
     @PreAuthorize("hasAnyRole('ADMIN', 'LANGUAGE_REVIEWER', 'MODERATOR')")
-    public ResponseEntity<List<TranslationSubmission>> getPendingSubmissions() {
-        return ResponseEntity.ok(submissionRepository.findByStatus(SubmissionStatus.PENDING));
+    public ResponseEntity<?> getPendingSubmissions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<TranslationSubmission> submissionPage = submissionRepository.findByStatus(SubmissionStatus.PENDING, pageable);
+        return ResponseEntity.ok(buildSubmissionPageResponse(submissionPage));
     }
 
     @GetMapping("/admin/submissions/{id}")
@@ -182,9 +198,17 @@ public class SubmissionController {
     // The calling reviewer/moderator/admin's own past approve/reject actions.
     @GetMapping("/admin/submissions/history")
     @PreAuthorize("hasAnyRole('ADMIN', 'LANGUAGE_REVIEWER', 'MODERATOR')")
-    public ResponseEntity<List<TranslationSubmission>> getModerationHistory() {
+    public ResponseEntity<?> getModerationHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         User reviewer = getCurrentUser();
-        return ResponseEntity.ok(submissionRepository.findByReviewedByIdOrderByReviewedAtDesc(reviewer.getId()));
+        if (reviewer == null) {
+            return ResponseEntity.status(401).body("Error: Authentication required.");
+        }
+
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "reviewedAt"));
+        Page<TranslationSubmission> submissionPage = submissionRepository.findByReviewedByIdOrderByReviewedAtDesc(reviewer.getId(), pageable);
+        return ResponseEntity.ok(buildSubmissionPageResponse(submissionPage));
     }
 
     @PostMapping("/admin/submissions/approve-all")
@@ -358,6 +382,34 @@ public class SubmissionController {
         translation.setVerified(true);
 
         return translationRepository.save(translation);
+    }
+
+    private Map<String, Object> buildSubmissionPageResponse(Page<TranslationSubmission> submissionPage) {
+        List<Map<String, Object>> content = new ArrayList<>();
+        for (TranslationSubmission submission : submissionPage.getContent()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", submission.getId());
+            item.put("sourceWord", submission.getSourceWord());
+            item.put("banglaTranslation", submission.getBanglaTranslation());
+            item.put("englishTranslation", submission.getEnglishTranslation());
+            item.put("pronunciation", submission.getPronunciation());
+            item.put("status", submission.getStatus());
+            item.put("createdAt", submission.getCreatedAt());
+            item.put("reviewedAt", submission.getReviewedAt());
+            item.put("submittedById", submission.getSubmittedBy() != null ? submission.getSubmittedBy().getId() : null);
+            item.put("reviewedById", submission.getReviewedBy() != null ? submission.getReviewedBy().getId() : null);
+            content.add(item);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("content", content);
+        response.put("page", submissionPage.getNumber());
+        response.put("size", submissionPage.getSize());
+        response.put("totalElements", submissionPage.getTotalElements());
+        response.put("totalPages", submissionPage.getTotalPages());
+        response.put("hasNext", submissionPage.hasNext());
+        response.put("hasPrevious", submissionPage.hasPrevious());
+        return response;
     }
 
     private static void recordSaved(List<String> sink, Translation translation) {
