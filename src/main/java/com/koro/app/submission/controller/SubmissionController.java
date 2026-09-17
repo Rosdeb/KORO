@@ -62,47 +62,100 @@ public class SubmissionController {
 
     // --- User Submission endpoints ---
     @PostMapping("/submissions")
-    public ResponseEntity<?> submitTranslation(@Valid @RequestBody SubmissionRequest request) {
+    public ResponseEntity<?> submitTranslation(@Valid @RequestBody List<SubmissionRequest> requests) {
         User user = getCurrentUser();
+        List<TranslationSubmission> savedSubmissions = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
 
-        Category category = categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found"));
-        Language sourceLanguage = languageRepository.findById(request.getSourceLanguageId())
-                .orElseThrow(() -> new RuntimeException("Source language not found"));
+        List<SubmissionRequest> expandedRequests = new ArrayList<>();
+        for (SubmissionRequest req : requests) {
+            String sourceWord = req.getSourceWord();
+            if (sourceWord != null && sourceWord.contains("/")) {
+                String[] sources = sourceWord.split("/");
+                String[] banglas = req.getBanglaTranslation() != null ? req.getBanglaTranslation().split("/") : new String[0];
+                String[] englishes = req.getEnglishTranslation() != null ? req.getEnglishTranslation().split("/") : new String[0];
+                String[] pronunciations = req.getPronunciation() != null ? req.getPronunciation().split("/") : new String[0];
 
-        String sourceWord = TextNormalizer.normalize(request.getSourceWord());
-
-        boolean existsInDictionary = !translationRepository
-                .findByLanguageIdAndTextIgnoreCase(sourceLanguage.getId(), sourceWord).isEmpty();
-        boolean alreadySubmitted = !submissionRepository
-                .findBySourceLanguageIdAndSourceWordIgnoreCaseAndStatusNot(
-                        sourceLanguage.getId(), sourceWord, SubmissionStatus.REJECTED)
-                .isEmpty();
-
-        if (existsInDictionary || alreadySubmitted) {
-            return ResponseEntity.status(409)
-                    .body("Error: This word already exists or has already been submitted for review.");
+                for (int i = 0; i < sources.length; i++) {
+                    SubmissionRequest splitReq = new SubmissionRequest();
+                    splitReq.setCategoryId(req.getCategoryId());
+                    splitReq.setSourceLanguageId(req.getSourceLanguageId());
+                    splitReq.setExampleSentence(req.getExampleSentence());
+                    splitReq.setNote(req.getNote());
+                    
+                    splitReq.setSourceWord(sources[i].trim());
+                    String b = i < banglas.length ? banglas[i].trim() : (banglas.length > 0 ? banglas[banglas.length - 1].trim() : "");
+                    splitReq.setBanglaTranslation(b);
+                    String e = i < englishes.length ? englishes[i].trim() : (englishes.length > 0 ? englishes[englishes.length - 1].trim() : "");
+                    splitReq.setEnglishTranslation(e);
+                    String p = i < pronunciations.length ? pronunciations[i].trim() : (pronunciations.length > 0 ? pronunciations[pronunciations.length - 1].trim() : "");
+                    splitReq.setPronunciation(p);
+                    
+                    expandedRequests.add(splitReq);
+                }
+            } else {
+                expandedRequests.add(req);
+            }
         }
 
-        TranslationSubmission submission = TranslationSubmission.builder()
-                .category(category)
-                .sourceLanguage(sourceLanguage)
-                .sourceWord(sourceWord)
-                .banglaTranslation(request.getBanglaTranslation())
-                .englishTranslation(request.getEnglishTranslation())
-                .pronunciation(request.getPronunciation())
-                .exampleSentence(request.getExampleSentence())
-                .notes(request.getNote())
-                .submittedBy(user)
-                .status(SubmissionStatus.PENDING)
-                .build();
+        for (SubmissionRequest request : expandedRequests) {
+            try {
+                Category category = categoryRepository.findById(request.getCategoryId())
+                        .orElseThrow(() -> new RuntimeException("Category not found for word: " + request.getSourceWord()));
+                Language sourceLanguage = languageRepository.findById(request.getSourceLanguageId())
+                        .orElseThrow(() -> new RuntimeException("Source language not found for word: " + request.getSourceWord()));
 
-        TranslationSubmission saved = submissionRepository.save(submission);
-        activityLogService.log(ActivityType.ADD_VOCABULARY,
-                "Submitted dictionary entry '" + sourceWord + "' (" + sourceLanguage.getName() + ") for review",
-                saved.getId(), null);
+                String sourceWord = TextNormalizer.normalize(request.getSourceWord());
 
-        return ResponseEntity.ok(saved);
+                boolean existsInDictionary = !translationRepository
+                        .findByLanguageIdAndTextIgnoreCase(sourceLanguage.getId(), sourceWord).isEmpty();
+                boolean alreadySubmitted = !submissionRepository
+                        .findBySourceLanguageIdAndSourceWordIgnoreCaseAndStatusNot(
+                                sourceLanguage.getId(), sourceWord, SubmissionStatus.REJECTED)
+                        .isEmpty();
+
+                if (existsInDictionary || alreadySubmitted) {
+                    errors.add("Word already exists or submitted: " + sourceWord);
+                    continue;
+                }
+
+                TranslationSubmission submission = TranslationSubmission.builder()
+                        .category(category)
+                        .sourceLanguage(sourceLanguage)
+                        .sourceWord(sourceWord)
+                        .banglaTranslation(request.getBanglaTranslation())
+                        .englishTranslation(request.getEnglishTranslation())
+                        .pronunciation(request.getPronunciation())
+                        .exampleSentence(request.getExampleSentence())
+                        .notes(request.getNote())
+                        .submittedBy(user)
+                        .status(SubmissionStatus.PENDING)
+                        .build();
+
+                TranslationSubmission saved = submissionRepository.save(submission);
+                activityLogService.log(ActivityType.ADD_VOCABULARY,
+                        "Submitted dictionary entry '" + sourceWord + "' (" + sourceLanguage.getName() + ") for review",
+                        saved.getId(), null);
+
+                savedSubmissions.add(saved);
+            } catch (Exception e) {
+                errors.add("Error processing word " + request.getSourceWord() + ": " + e.getMessage());
+            }
+        }
+
+        if (savedSubmissions.isEmpty() && !errors.isEmpty()) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("errors", errors);
+            return ResponseEntity.status(409).body(response);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("saved", savedSubmissions);
+        if (!errors.isEmpty()) {
+            response.put("errors", errors);
+        }
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/submissions")
