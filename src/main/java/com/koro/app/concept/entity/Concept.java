@@ -23,6 +23,7 @@ public class Concept {
     private String description;
 
     @DocumentReference
+    @Indexed
     private Category category;
 
     private String referenceImage;

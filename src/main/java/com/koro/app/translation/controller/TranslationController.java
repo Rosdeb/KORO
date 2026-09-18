@@ -443,47 +443,74 @@ public class TranslationController {
      * ============================================================
      */
 
+    @GetMapping("/translations/count")
+    public ResponseEntity<Long> getTranslationsCount() {
+        return ResponseEntity.ok(translationRepository.count());
+    }
+
     @GetMapping("/translations")
-    public ResponseEntity<List<TranslationResponse>> getTranslations(
+    public ResponseEntity<?> getTranslations(
             @RequestParam(required = false) String conceptId,
-            @RequestParam(required = false) String languageId) {
+            @RequestParam(required = false) String languageId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
-        List<Translation> results;
+        if (page != null && size != null) {
+            org.springframework.data.domain.Pageable pageable = 
+                    org.springframework.data.domain.PageRequest.of(page, size);
+            org.springframework.data.domain.Page<Translation> results;
 
-        if (conceptId != null && languageId != null) {
+            if (conceptId != null && languageId != null) {
+                List<Translation> list = translationRepository
+                        .findByConceptIdAndLanguageId(conceptId, languageId)
+                        .map(List::of)
+                        .orElse(List.of());
+                results = new org.springframework.data.domain.PageImpl<>(list, pageable, list.size());
+            } else if (conceptId != null) {
+                results = translationRepository.findByConceptId(conceptId, pageable);
+            } else if (languageId != null) {
+                results = translationRepository.findByLanguageId(languageId, pageable);
+            } else {
+                results = translationRepository.findAll(pageable);
+            }
 
-            results = translationRepository
-                    .findByConceptIdAndLanguageId(
-                            conceptId,
-                            languageId
-                    )
-                    .map(List::of)
-                    .orElse(List.of());
+            List<TranslationResponse> content = results.getContent().stream()
+                    .filter(t -> t.getConcept() != null && t.getLanguage() != null)
+                    .map(TranslationResponse::fromTranslation)
+                    .collect(Collectors.toList());
 
-        } else if (conceptId != null) {
-
-            results = translationRepository
-                    .findByConceptId(conceptId);
-
-        } else if (languageId != null) {
-
-            results = translationRepository
-                    .findByLanguageId(languageId);
-
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("content", content);
+            response.put("page", results.getNumber());
+            response.put("size", results.getSize());
+            response.put("totalElements", results.getTotalElements());
+            response.put("totalPages", results.getTotalPages());
+            response.put("hasNext", results.hasNext());
+            response.put("hasPrevious", results.hasPrevious());
+            return ResponseEntity.ok(response);
         } else {
+            List<Translation> results;
 
-            results = translationRepository.findAll();
+            if (conceptId != null && languageId != null) {
+                results = translationRepository
+                        .findByConceptIdAndLanguageId(conceptId, languageId)
+                        .map(List::of)
+                        .orElse(List.of());
+            } else if (conceptId != null) {
+                results = translationRepository.findByConceptId(conceptId);
+            } else if (languageId != null) {
+                results = translationRepository.findByLanguageId(languageId);
+            } else {
+                results = translationRepository.findAll();
+            }
+
+            return ResponseEntity.ok(
+                    results.stream()
+                            .filter(t -> t.getConcept() != null && t.getLanguage() != null)
+                            .map(TranslationResponse::fromTranslation)
+                            .collect(Collectors.toList())
+            );
         }
-
-        return ResponseEntity.ok(
-                results.stream()
-                        .filter(t ->
-                                t.getConcept() != null &&
-                                        t.getLanguage() != null
-                        )
-                        .map(TranslationResponse::fromTranslation)
-                        .collect(Collectors.toList())
-        );
     }
 
     /*

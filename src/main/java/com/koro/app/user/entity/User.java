@@ -35,9 +35,11 @@ public class User {
     private String preferredLanguage;
 
     @Builder.Default
+    @Indexed
     private Set<Role> roles = new HashSet<>();
 
     @Builder.Default
+    @Indexed
     private UserStatus status = UserStatus.ACTIVE;
 
     @CreatedDate

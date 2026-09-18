@@ -9,6 +9,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.DocumentReference;
+import org.springframework.data.mongodb.core.index.Indexed;
 import java.time.LocalDateTime;
 
 @Document(collection = "translation_submissions")
@@ -23,9 +24,11 @@ public class TranslationSubmission {
     private String id;
 
     @DocumentReference
+    @Indexed
     private Category category;
 
     @DocumentReference
+    @Indexed
     private Language sourceLanguage;
 
     private String sourceWord;
@@ -41,9 +44,11 @@ public class TranslationSubmission {
     private String notes;
 
     @DocumentReference
+    @Indexed
     private User submittedBy;
 
     @Builder.Default
+    @Indexed
     private SubmissionStatus status = SubmissionStatus.PENDING;
 
     private String reviewerNote;
@@ -51,6 +56,7 @@ public class TranslationSubmission {
     private String rejectionReason;
 
     @DocumentReference
+    @Indexed
     private User reviewedBy;
 
     @CreatedDate

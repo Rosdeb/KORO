@@ -24,13 +24,17 @@ public class Translation {
     private String id;
 
     @DocumentReference
+    @org.springframework.data.mongodb.core.index.Indexed
     private Concept concept;
 
     @DocumentReference
+    @org.springframework.data.mongodb.core.index.Indexed
     private Language language;
 
+    @org.springframework.data.mongodb.core.index.Indexed
     private String text;
 
+    @org.springframework.data.mongodb.core.index.Indexed
     private String pronunciation;
 
     @Builder.Default

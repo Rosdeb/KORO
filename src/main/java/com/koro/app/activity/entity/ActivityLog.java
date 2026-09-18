@@ -20,8 +20,10 @@ public class ActivityLog {
     private String id;
 
     @DocumentReference(lazy = true)
+    @org.springframework.data.mongodb.core.index.Indexed
     private User user;
 
+    @org.springframework.data.mongodb.core.index.Indexed
     private ActivityType activityType;
 
     private String description;
@@ -35,5 +37,6 @@ public class ActivityLog {
     private String device;
 
     @CreatedDate
+    @org.springframework.data.mongodb.core.index.Indexed
     private LocalDateTime createdAt;
 }
