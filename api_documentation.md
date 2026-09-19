@@ -420,3 +420,34 @@ A submission is a full dictionary entry — a word in its **source language**, p
 | `reviewer@koro.com` | `password` | `ROLE_LANGUAGE_REVIEWER`, `ROLE_USER` |
 | `moderator@koro.com` | `password` | `ROLE_MODERATOR`, `ROLE_USER` |
 | `user@koro.com` | `password` | `ROLE_USER` |
+
+### Activity history pagination and retention
+
+`GET /api/v1/activity?from=2026-09-14&to=2026-09-19&page=0&size=10`
+
+Requires authentication. `from` and `to` are optional inclusive dates. `page` is zero-based
+(default `0`); `size` defaults to `10` and must be between `1` and `100`. Invalid pagination
+or a reversed date range returns HTTP 400. Results are ordered newest first, with ID as a
+tie breaker, and paginated in MongoDB.
+
+The response is now an object instead of a plain array; clients must read `content`:
+
+```json
+{
+  "content": [],
+  "page": 0,
+  "size": 10,
+  "totalElements": 0,
+  "totalPages": 0,
+  "first": true,
+  "last": true
+}
+```
+
+Every valid authenticated history or activity-statistics request first deletes documents
+from `activity_logs` with `createdAt` strictly older than the current time minus 7 days,
+for all users. This is a rolling retention window, triggered by requests, not a weekly
+scheduled job. Only activity history is removed; referenced users, translations, saved
+words, collections, image results, and exports are untouched. History outside this window
+is no longer available even when requested with date filters. Activity statistics count
+only retained history. Without requests, cleanup waits until the next activity request.

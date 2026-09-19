@@ -16,7 +16,11 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import java.util.Map;
 
 @Service
@@ -27,6 +31,15 @@ public class ActivityLogService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
+    private void cleanExpiredHistory() {
+        // Remove only history documents, never the referenced users or application data.
+        mongoTemplate.remove(Query.query(Criteria.where("createdAt")
+                .lt(LocalDateTime.now().minusDays(7))), ActivityLog.class);
+    }
 
     @Transactional
     public void log(ActivityType type, String description, String referenceId, String metadata) {
@@ -53,20 +66,22 @@ public class ActivityLogService {
         activityLogRepository.save(log);
     }
 
-    public List<ActivityLog> getLogsForCurrentUser() {
+    public Page<ActivityLog> getLogsForCurrentUser(Pageable pageable) {
         User user = getCurrentUser();
         if (user == null) {
             throw new RuntimeException("Authentication required to get logs");
         }
-        return activityLogRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        cleanExpiredHistory();
+        return activityLogRepository.findByUserId(user.getId(), pageable);
     }
 
-    public List<ActivityLog> getLogsForCurrentUserFiltered(LocalDateTime start, LocalDateTime end) {
+    public Page<ActivityLog> getLogsForCurrentUserFiltered(LocalDateTime start, LocalDateTime end, Pageable pageable) {
         User user = getCurrentUser();
         if (user == null) {
             throw new RuntimeException("Authentication required to get logs");
         }
-        return activityLogRepository.findByUserIdAndCreatedAtBetweenOrderByCreatedAtDesc(user.getId(), start, end);
+        cleanExpiredHistory();
+        return activityLogRepository.findByUserIdAndCreatedAtBetween(user.getId(), start, end, pageable);
     }
 
     public Map<String, Object> getStatisticsForCurrentUser() {
@@ -74,6 +89,7 @@ public class ActivityLogService {
         if (user == null) {
             throw new RuntimeException("Authentication required to get statistics");
         }
+        cleanExpiredHistory();
         String userId = user.getId();
         
         Map<String, Object> stats = new HashMap<>();
