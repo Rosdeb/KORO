@@ -13,15 +13,12 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -61,7 +58,7 @@ class ActivityApiTest {
     }
 
     @Test
-    void rejectsInvalidParametersBeforeServiceCanDeleteHistory() {
+    void rejectsInvalidParametersBeforeCallingService() {
         ActivityLogService service = mock(ActivityLogService.class);
         ActivityController controller = new ActivityController();
         ReflectionTestUtils.setField(controller, "activityLogService", service);
@@ -73,13 +70,11 @@ class ActivityApiTest {
     }
 
     @Test
-    void authenticatedReadDeletesOnlyExpiredActivityBeforeReadingUserPage() {
+    void authenticatedReadFetchesOnlyUserPageWithoutMutations() {
         ActivityLogRepository repository = mock(ActivityLogRepository.class);
-        MongoTemplate mongo = mock(MongoTemplate.class);
         UserRepository users = mock(UserRepository.class);
         ActivityLogService service = new ActivityLogService();
         ReflectionTestUtils.setField(service, "activityLogRepository", repository);
-        ReflectionTestUtils.setField(service, "mongoTemplate", mongo);
         ReflectionTestUtils.setField(service, "userRepository", users);
         User user = new User();
         user.setId("user-1");
@@ -88,23 +83,14 @@ class ActivityApiTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
         var pageable = PageRequest.of(0, 10);
         when(repository.findByUserId("user-1", pageable)).thenReturn(new PageImpl<>(List.of(), pageable, 0));
-        LocalDateTime earliestCutoff = LocalDateTime.now().minusDays(7);
-        service.getLogsForCurrentUser(pageable);
-        LocalDateTime latestCutoff = LocalDateTime.now().minusDays(7);
-        ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
-        var ordered = inOrder(mongo, repository);
-        ordered.verify(mongo).remove(query.capture(), eq(ActivityLog.class));
-        ordered.verify(repository).findByUserId("user-1", pageable);
-        var criteria = (org.bson.Document) query.getValue().getQueryObject().get("createdAt");
-        LocalDateTime cutoff = (LocalDateTime) criteria.get("$lt");
-        assertFalse(cutoff.isBefore(earliestCutoff));
-        assertFalse(cutoff.isAfter(latestCutoff));
-        assertEquals(1, criteria.size());
-        verifyNoMoreInteractions(mongo, repository);
+        var result = service.getLogsForCurrentUser(pageable);
+        assertNotNull(result);
+        verify(repository).findByUserId("user-1", pageable);
+        verifyNoMoreInteractions(repository);
 
         SecurityContextHolder.clearContext();
-        clearInvocations(mongo, repository);
+        clearInvocations(repository);
         assertThrows(RuntimeException.class, () -> service.getLogsForCurrentUser(pageable));
-        verifyNoInteractions(mongo, repository);
+        verifyNoInteractions(repository);
     }
 }

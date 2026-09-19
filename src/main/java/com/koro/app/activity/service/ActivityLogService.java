@@ -18,9 +18,6 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import java.util.Map;
 
 @Service
@@ -31,15 +28,6 @@ public class ActivityLogService {
 
     @Autowired
     private UserRepository userRepository;
-
-    @Autowired
-    private MongoTemplate mongoTemplate;
-
-    private void cleanExpiredHistory() {
-        // Remove only history documents, never the referenced users or application data.
-        mongoTemplate.remove(Query.query(Criteria.where("createdAt")
-                .lt(LocalDateTime.now().minusDays(7))), ActivityLog.class);
-    }
 
     @Transactional
     public void log(ActivityType type, String description, String referenceId, String metadata) {
@@ -71,7 +59,6 @@ public class ActivityLogService {
         if (user == null) {
             throw new RuntimeException("Authentication required to get logs");
         }
-        cleanExpiredHistory();
         return activityLogRepository.findByUserId(user.getId(), pageable);
     }
 
@@ -80,7 +67,6 @@ public class ActivityLogService {
         if (user == null) {
             throw new RuntimeException("Authentication required to get logs");
         }
-        cleanExpiredHistory();
         return activityLogRepository.findByUserIdAndCreatedAtBetween(user.getId(), start, end, pageable);
     }
 
@@ -89,7 +75,6 @@ public class ActivityLogService {
         if (user == null) {
             throw new RuntimeException("Authentication required to get statistics");
         }
-        cleanExpiredHistory();
         String userId = user.getId();
         
         Map<String, Object> stats = new HashMap<>();

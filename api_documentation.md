@@ -421,7 +421,7 @@ A submission is a full dictionary entry — a word in its **source language**, p
 | `moderator@koro.com` | `password` | `ROLE_MODERATOR`, `ROLE_USER` |
 | `user@koro.com` | `password` | `ROLE_USER` |
 
-### Activity history pagination and retention
+### Activity history pagination
 
 `GET /api/v1/activity?from=2026-09-14&to=2026-09-19&page=0&size=10`
 
@@ -444,10 +444,5 @@ The response is now an object instead of a plain array; clients must read `conte
 }
 ```
 
-Every valid authenticated history or activity-statistics request first deletes documents
-from `activity_logs` with `createdAt` strictly older than the current time minus 7 days,
-for all users. This is a rolling retention window, triggered by requests, not a weekly
-scheduled job. Only activity history is removed; referenced users, translations, saved
-words, collections, image results, and exports are untouched. History outside this window
-is no longer available even when requested with date filters. Activity statistics count
-only retained history. Without requests, cleanup waits until the next activity request.
+Activity requests do not delete history. Older activities remain available through date
+filters and pagination, and activity statistics count all stored history.
