@@ -305,11 +305,9 @@ public class TranslationController {
      * ============================================================
      */
 
-    private final Map<String, List<Translation>> textIndex =
-            new ConcurrentHashMap<>();
+    private final Map<String, List<Translation>> textIndex = new ConcurrentHashMap<>();
 
-    private final Map<String, List<Translation>> pronunciationIndex =
-            new ConcurrentHashMap<>();
+    private final Map<String, List<Translation>> pronunciationIndex = new ConcurrentHashMap<>();
 
     private List<Translation> globalTextIndex = List.of();
 
@@ -342,8 +340,7 @@ public class TranslationController {
          */
         globalTextIndex = allTranslations.stream()
                 .filter(t -> t.getText() != null)
-                .sorted(
-                        Comparator.comparing(
+                .sorted(Comparator.comparing(
                                 t -> normalizeForSearch(t.getText())
                         )
                 )
@@ -397,13 +394,11 @@ public class TranslationController {
             /*
              * Pronunciation
              */
-            if (translation.getPronunciation() != null &&
-                    !translation.getPronunciation().isBlank()) {
+            if (translation.getPronunciation() != null && !translation.getPronunciation().isBlank()) {
 
                 newPronunciationIndex
                         .computeIfAbsent(
-                                languageId,
-                                key -> new ArrayList<>()
+                                languageId, key -> new ArrayList<>()
                         )
                         .add(translation);
             }
@@ -600,21 +595,13 @@ public class TranslationController {
             /*
              * Return target-language translations.
              */
-            for (String conceptId : conceptIds) {
-
-                translationRepository
-                        .findByConceptIdAndLanguageId(
-                                conceptId,
-                                targetLanguageId
-                        )
-                        .ifPresent(
-                                translation ->
-                                        putMatch(
-                                                matches,
-                                                translation
-                                        )
-                        );
-            }
+            addMatches(
+                    matches,
+                    translationRepository.findByConceptIdInAndLanguageId(
+                            conceptIds,
+                            targetLanguageId
+                    )
+            );
 
         }
 
@@ -625,24 +612,15 @@ public class TranslationController {
          */
         else if (targetLanguageId != null) {
 
-            List<Translation> languageText =
-                    textIndex.getOrDefault(
-                            targetLanguageId,
-                            List.of()
-                    );
+            List<Translation> languageText = textIndex.getOrDefault(targetLanguageId, List.of());
 
-            List<Translation> languagePronunciation =
-                    pronunciationIndex.getOrDefault(
-                            targetLanguageId,
-                            List.of()
-                    );
+            List<Translation> languagePronunciation = pronunciationIndex.getOrDefault(
+                    targetLanguageId, List.of());
 
             /*
              * Binary search text.
              */
-            addMatches(
-                    matches,
-                    binaryPrefixSearch(
+            addMatches(matches, binaryPrefixSearch(
                             languageText,
                             query,
                             SearchField.TEXT
@@ -815,10 +793,7 @@ public class TranslationController {
             String query,
             SearchField field) {
 
-        if (sortedList == null ||
-                sortedList.isEmpty() ||
-                query == null ||
-                query.isEmpty()) {
+        if (sortedList == null || sortedList.isEmpty() || query == null || query.isEmpty()) {
 
             return List.of();
         }
@@ -833,11 +808,9 @@ public class TranslationController {
          */
         while (left <= right) {
 
-            int middle =
-                    left + (right - left) / 2;
+            int middle = left + (right - left) / 2;
 
-            String value =
-                    getSearchValue(
+            String value = getSearchValue(
                             sortedList.get(middle),
                             field
                     );
@@ -847,8 +820,7 @@ public class TranslationController {
                 continue;
             }
 
-            int comparison =
-                    value.compareTo(query);
+            int comparison = value.compareTo(query);
 
             if (comparison >= 0) {
 
@@ -868,8 +840,7 @@ public class TranslationController {
         /*
          * Collect only matching prefix entries.
          */
-        List<Translation> results =
-                new ArrayList<>();
+        List<Translation> results = new ArrayList<>();
 
         for (int i = firstMatch;
              i < sortedList.size();

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface TranslationRepository extends MongoRepository<Translation, String> {
@@ -23,6 +24,9 @@ public interface TranslationRepository extends MongoRepository<Translation, Stri
 
     List<Translation> findByPronunciationContainingIgnoreCase(String pronunciation);
     List<Translation> findByLanguageIdAndPronunciationContainingIgnoreCase(String languageId, String pronunciation);
-
+    List<Translation> findByConceptIdInAndLanguageId(
+            Set<String> conceptIds,
+            String languageId
+    );
     List<Translation> findByConceptIdIn(Collection<String> conceptIds);
 }
