@@ -7,9 +7,7 @@ import com.koro.app.auth.entity.RefreshToken;
 import com.koro.app.auth.security.CustomUserDetails;
 import com.koro.app.auth.security.JwtUtils;
 import com.koro.app.auth.service.RefreshTokenService;
-import com.koro.app.user.entity.Role;
 import com.koro.app.user.entity.User;
-import com.koro.app.user.entity.UserStatus;
 import com.koro.app.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,11 +16,10 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.koro.app.auth.service.EmailVerificationService;
 import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -37,9 +34,6 @@ public class AuthController {
     private UserRepository userRepository;
 
     @Autowired
-    private PasswordEncoder encoder;
-
-    @Autowired
     private JwtUtils jwtUtils;
 
     @Autowired
@@ -48,8 +42,13 @@ public class AuthController {
     @Autowired
     private ActivityLogService activityLogService;
 
-    // Simple cache for reset tokens in-memory for testing forgot/reset password
-    private final Map<String, String> passwordResetTokens = new ConcurrentHashMap<>();
+    @Autowired
+    private EmailVerificationService verification;
+
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<MessageResponse> handleVerificationError(org.springframework.web.server.ResponseStatusException error) {
+        return ResponseEntity.status(error.getStatusCode()).body(new MessageResponse(error.getReason()));
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
@@ -88,32 +87,21 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest signUpRequest) {
-        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse("Error: Email is already in use!"));
-        }
+        verification.register(signUpRequest);
+        return ResponseEntity.accepted().body(new MessageResponse("If registration is available, a verification code has been emailed. Verify within 15 minutes."));
+    }
 
-        // Create new user's account
-        User user = User.builder()
-                .name(signUpRequest.getName())
-                .email(signUpRequest.getEmail())
-                .password(encoder.encode(signUpRequest.getPassword()))
-                .nativeLanguage(signUpRequest.getNativeLanguage())
-                .preferredLanguage(signUpRequest.getPreferredLanguage())
-                .status(UserStatus.ACTIVE)
-                .build();
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        User user = verification.verifyRegistration(request.getEmail(), request.getOtp());
+        activityLogService.logManual(user, ActivityType.UPDATE_PROFILE, "User registered: " + user.getEmail());
+        return ResponseEntity.ok(new MessageResponse("Email verified. You can now log in."));
+    }
 
-        // Self-registration always grants the base USER role only. Elevated roles
-        // (ADMIN, LANGUAGE_REVIEWER, MODERATOR) can only be granted afterwards by
-        // an existing admin via PUT /api/v1/admin/users/{id}/roles.
-        user.setRoles(Set.of(Role.ROLE_USER));
-        User savedUser = userRepository.save(user);
-
-        // Log registration
-        activityLogService.logManual(savedUser, ActivityType.UPDATE_PROFILE, "User registered: " + savedUser.getEmail());
-
-        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@Valid @RequestBody ForgotPasswordRequest request) {
+        verification.resend(request.getEmail());
+        return ResponseEntity.accepted().body(new MessageResponse("If a pending registration exists, a verification code has been emailed."));
     }
 
     @PostMapping("/refresh")
@@ -143,36 +131,13 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Email address not found."));
-        }
-
-        String token = UUID.randomUUID().toString();
-        passwordResetTokens.put(token, request.getEmail());
-
-        // In production, send token via email. For MVP we return it in response for testing.
-        return ResponseEntity.ok(new MessageResponse("Password reset token generated successfully. For testing/API use, reset token: " + token));
+        verification.forgotPassword(request.getEmail());
+        return ResponseEntity.accepted().body(new MessageResponse("If an account exists, a password reset code has been emailed."));
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        String email = passwordResetTokens.get(request.getToken());
-        if (email == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Invalid or expired reset token."));
-        }
-
-        Optional<User> userOpt = userRepository.findByEmail(email);
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: User not found."));
-        }
-
-        User user = userOpt.get();
-        user.setPassword(encoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-
-        passwordResetTokens.remove(request.getToken());
-
-        return ResponseEntity.ok(new MessageResponse("Password reset successful. You can now login with your new password."));
+        verification.resetPassword(request.getEmail(), request.getOtp(), request.getNewPassword());
+        return ResponseEntity.ok(new MessageResponse("Password reset successful. Please log in with your new password."));
     }
 }

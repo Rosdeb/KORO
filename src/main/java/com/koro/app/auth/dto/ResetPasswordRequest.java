@@ -1,17 +1,12 @@
 package com.koro.app.auth.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
-public class ResetPasswordRequest {
-    @NotBlank
-    private String token;
-
-    @NotBlank
-    @Size(min = 6, max = 40)
+public class ResetPasswordRequest extends VerifyEmailRequest {
+    @NotBlank @Size(min = 6, max = 40)
     private String newPassword;
 }

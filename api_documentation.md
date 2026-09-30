@@ -81,6 +81,8 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 
 ## 1. Authentication API (`/api/v1/auth`)
 
+See [Email OTP setup and frontend flow](AUTH_EMAIL_VERIFICATION.md) for configuration, expiration, limits, and request examples.
+
 ### Register User
 *   **URL**: `/api/v1/auth/register`
 *   **Method**: `POST`
@@ -95,13 +97,17 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
       "preferredLanguage": "Chakma"
     }
     ```
-    *Always creates a `ROLE_USER` account. There is no client-controlled `roles` field — this was a privilege-escalation hole (anyone could self-register as admin) that has been closed. To grant elevated roles, an admin must call `PUT /api/v1/admin/users/{id}/roles` after the account exists.*
-*   **Response (200 OK)**:
+    *Creates a temporary registration; successful email OTP verification creates a `ROLE_USER` account. There is no client-controlled `roles` field — this was a privilege-escalation hole (anyone could self-register as admin) that has been closed. To grant elevated roles, an admin must call `PUT /api/v1/admin/users/{id}/roles` after the account exists.*
+*   **Response (202 Accepted)**:
     ```json
     {
-      "message": "User registered successfully!"
+      "message": "If registration is available, a verification code has been emailed. Verify within 15 minutes."
     }
     ```
+
+### Verify / Resend Email
+* **POST** `/api/v1/auth/verify-email`: `{"email":"user@koro.com","otp":"123456"}`. Creates the account on success (200); then log in.
+* **POST** `/api/v1/auth/resend-verification`: `{"email":"user@koro.com"}`. Returns 202. Wait at least 60 seconds between sends.
 
 ### Login
 *   **URL**: `/api/v1/auth/login`
@@ -152,6 +158,8 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 
 ### Forgot / Reset Password
 *   **URLs**: `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password`
+*   Forgot request: `{"email":"user@koro.com"}`. Returns a generic 202; sends an OTP if the account exists.
+*   Reset request: `{"email":"user@koro.com","otp":"123456","newPassword":"new-password"}`. Returns 200 on success. The former `token` field is no longer accepted.
 *   **Method**: `POST`
 *   **Access**: Public
 
