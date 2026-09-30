@@ -31,13 +31,13 @@ public class OtpEmailSender {
             boolean registration = "REGISTER".equals(purpose);
             String title = registration ? "Verify your email address" : "Reset your password";
             String intro = registration
-                    ? "Welcome to Koro! Confirm your email address to finish creating your account."
-                    : "We received a request to reset your Koro password. Use the code below to choose a new password.";
+                    ? "Welcome to KOROT! Confirm your email address to finish creating your account."
+                    : "We received a request to reset your KOROT password. Use the code below to choose a new password.";
             String instruction = registration
-                    ? "Enter this six-digit code on the email verification screen in Koro."
-                    : "Return to the password reset screen in Koro and enter this code along with your new password.";
+                    ? "Enter this six-digit code on the email verification screen in KOROT."
+                    : "Return to the password reset screen in KOROT and enter this code along with your new password.";
             String ignore = registration
-                    ? "Did not sign up for Koro? You can ignore this email. Your unverified registration will expire automatically."
+                    ? "Did not sign up for KOROT? You can ignore this email. Your unverified registration will expire automatically."
                     : "Did not request a password reset? You can ignore this email. Your password has not been changed.";
             String html;
             try (var input = new ClassPathResource("templates/email/otp.html").getInputStream()) {
@@ -46,9 +46,9 @@ public class OtpEmailSender {
             // All substitutions are fixed copy or a validated numeric code, never user-supplied HTML.
             html = html.replace("{{title}}", title)
                     .replace("{{preheader}}", registration
-                            ? "One more step to get started: verify your email with your Koro code."
-                            : "Your Koro password reset code is ready. Keep it private.")
-                    .replace("{{label}}", registration ? "Welcome to Koro" : "Account security")
+                            ? "One more step to get started: verify your email with your KOROT code."
+                            : "Your KOROT password reset code is ready. Keep it private.")
+                    .replace("{{label}}", registration ? "Welcome to KOROT" : "Account security")
                     .replace("{{intro}}", intro).replace("{{instruction}}", instruction)
                     .replace("{{ignore}}", ignore).replace("{{code}}", code);
             String text = title + "\n\nHi there,\n\n" + intro
@@ -56,10 +56,10 @@ public class OtpEmailSender {
                     + "\n\nThe verification window lasts 15 minutes from your first request. "
                     + "Resending a code does not extend it. Only your most recent code will work."
                     + "\n\nKeep this code private. Never share it with anyone.\n\n" + ignore
-                    + "\n\nThanks,\nThe Koro team\n\nThis is an automated security email from Koro.";
+                    + "\n\nThanks,\nThe KOROT team\n\nThis is an automated security email from KOROT.";
             new Resend(apiKey).emails().send(CreateEmailOptions.builder()
                     .from(from).to(email)
-                    .subject(purpose.equals("REGISTER") ? "Verify your Koro email" : "Reset your Koro password")
+                    .subject(purpose.equals("REGISTER") ? "Verify your KOROT email" : "Reset your KOROT password")
                     .html(html)
                     .text(text)
                     .build());
