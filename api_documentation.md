@@ -55,6 +55,13 @@ All protected endpoints require a `Bearer <JWT_TOKEN>` in the `Authorization` he
 | `/api/v1/export/files/{name}` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/submissions` | GET / POST | | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/activity`, `/activity/statistics` | GET | | ✅ own | ✅ own | ✅ own | ✅ own |
+| `/api/v1/contact`, `/api/v1/contact-us` | POST | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/admin/contact-messages` | GET | | | | ✅ | ✅ |
+| `/api/v1/admin/contact-messages/{id}` | GET | | | | ✅ | ✅ |
+| `/api/v1/admin/contact-messages/{id}/status` | PUT | | | | ✅ | ✅ |
+| `/api/v1/admin/contact-messages/{id}/reply` | POST | | | | ✅ | ✅ |
+| `/api/v1/admin/contact-messages/{id}` | DELETE | | | | | ✅ |
+| `/api/v1/admin/contact-messages/statistics` | GET | | | | ✅ | ✅ |
 | `/api/v1/admin/submissions/pending` | GET | | | ✅ | ✅ | ✅ |
 | `/api/v1/admin/submissions/{id}` | GET | | | ✅ | ✅ | ✅ |
 | `/api/v1/admin/submissions/history` | GET | | | ✅ own | ✅ own | ✅ own |
@@ -415,6 +422,135 @@ A submission is a full dictionary entry — a word in its **source language**, p
     ```
 *   **Access**: `ROLE_ADMIN` only, except the routes marked above which also accept `ROLE_MODERATOR`.
 *   **Note**: the public `GET /api/v1/languages` only returns languages with `active: true` (see §3). To manage — and see — inactive languages, use the admin-only `GET /api/v1/admin/languages`, which returns every language regardless of `active` status. Setting `active: false` via `PUT` is a soft-deactivation: the record still exists and is still editable, it just drops out of the public list.
+
+---
+
+## 📬 Contact Us & Admin Inquiry Management
+
+### 1. Submit Contact Message (Public)
+* **`POST /api/v1/contact`** or **`POST /api/v1/contact-us`**
+* **Access**: Public (anyone, guest or logged in user). If authenticated with Bearer token, `userId` is automatically linked.
+* **Request Body**:
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "subject": "Question about indigenous translations",
+  "message": "Hello, I would like to contribute translations for the Koch language."
+}
+```
+* **Response** (`201 Created`):
+```json
+{
+  "message": "Your message has been received. We will get back to you soon.",
+  "contactMessage": {
+    "id": "651f...",
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "subject": "Question about indigenous translations",
+    "message": "Hello, I would like to contribute translations for the Koch language.",
+    "status": "PENDING",
+    "userId": null,
+    "createdAt": "2026-10-01T19:15:00",
+    "updatedAt": "2026-10-01T19:15:00"
+  }
+}
+```
+
+### 2. Admin List Contact Messages
+* **`GET /api/v1/admin/contact-messages`**
+* **Access**: `ROLE_ADMIN`, `ROLE_MODERATOR`
+* **Query Parameters**:
+  * `page` (integer, default `0`)
+  * `size` (integer, default `20`)
+  * `status` (optional: `PENDING`, `READ`, `REPLIED`, `ARCHIVED`)
+  * `search` (optional: search keyword across name, email, subject, message)
+* **Response** (`200 OK`):
+```json
+{
+  "content": [
+    {
+      "id": "651f...",
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "subject": "Question about indigenous translations",
+      "message": "Hello, I would like to contribute translations...",
+      "status": "PENDING",
+      "createdAt": "2026-10-01T19:15:00"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1,
+  "hasNext": false,
+  "hasPrevious": false
+}
+```
+
+### 3. Admin Get Single Contact Message
+* **`GET /api/v1/admin/contact-messages/{id}?markRead=true`**
+* **Access**: `ROLE_ADMIN`, `ROLE_MODERATOR`
+* Automatically marks a `PENDING` message as `READ` unless `markRead=false`.
+
+### 4. Admin Update Status
+* **`PUT /api/v1/admin/contact-messages/{id}/status`**
+* **Access**: `ROLE_ADMIN`, `ROLE_MODERATOR`
+* **Request Body**:
+```json
+{
+  "status": "ARCHIVED"
+}
+```
+
+### 5. Admin Reply via Email
+* **`POST /api/v1/admin/contact-messages/{id}/reply`**
+* **Access**: `ROLE_ADMIN`, `ROLE_MODERATOR`
+* Sends a branded HTML & plain-text email directly to the user's `email` via Resend, including the original message and response, sets status to `REPLIED`, and stores reply timestamps & admin details.
+* **Request Body**:
+```json
+{
+  "subject": "Re: Question about indigenous translations",
+  "message": "Hi Jane, we would love to have your contributions! Please register an account and start submitting words."
+}
+```
+* **Response** (`200 OK`):
+```json
+{
+  "message": "Reply sent successfully to jane@example.com",
+  "contactMessage": {
+    "id": "651f...",
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "subject": "Question about indigenous translations",
+    "message": "Hello, I would like to contribute translations...",
+    "status": "REPLIED",
+    "replySubject": "Re: Question about indigenous translations",
+    "replyMessage": "Hi Jane, we would love to have your contributions!...",
+    "repliedBy": "Admin User",
+    "repliedByUserId": "651a...",
+    "repliedAt": "2026-10-01T19:20:00"
+  }
+}
+```
+
+### 6. Admin Get Contact Statistics
+* **`GET /api/v1/admin/contact-messages/statistics`**
+* **Access**: `ROLE_ADMIN`, `ROLE_MODERATOR`
+* **Response** (`200 OK`):
+```json
+{
+  "total": 15,
+  "pending": 3,
+  "read": 2,
+  "replied": 9,
+  "archived": 1
+}
+```
+
+### 7. Admin Delete Contact Message
+* **`DELETE /api/v1/admin/contact-messages/{id}`**
+* **Access**: `ROLE_ADMIN` only
 
 ---
 

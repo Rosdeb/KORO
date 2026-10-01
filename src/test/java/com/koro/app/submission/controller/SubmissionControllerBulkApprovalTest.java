@@ -127,7 +127,6 @@ class SubmissionControllerBulkApprovalTest {
         submission.setStatus(SubmissionStatus.PENDING);
 
         when(submissionRepository.findByStatus(SubmissionStatus.PENDING)).thenReturn(List.of(submission));
-        when(submissionRepository.findById("submission-1")).thenReturn(Optional.of(submission));
         when(submissionRepository.save(any(TranslationSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
