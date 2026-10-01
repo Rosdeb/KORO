@@ -1,54 +1,123 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+  <meta name="x-apple-disable-message-reformatting">
   <meta name="color-scheme" content="light">
   <title>{{subject}}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
+  </style>
+  <![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f3f5f9;color:#182230;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;">
-  <div style="display:none;font-size:1px;color:#f3f5f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">We have replied to your inquiry: {{subject}}</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f5f9;">
+<body style="margin:0;padding:0;background-color:#f4f6f8;color:#1e293b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;line-height:1.6;">
+  
+  <!-- Inbox Preview Text (Preheader) -->
+  <div style="display:none;font-size:1px;color:#f4f6f8;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
+    KOROT Support response regarding your inquiry: {{subject}}. Reference #{{ticketId}}
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f6f8;margin:0;padding:24px 0;">
     <tr>
-      <td align="center" style="padding:32px 16px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
+      <td align="center" style="padding:0 12px;">
+        <!-- Container -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          
+          <!-- Header Bar -->
           <tr>
-            <td style="padding:0 8px 20px;font-size:26px;line-height:32px;font-weight:700;letter-spacing:-1px;color:#4338ca;">korot<span style="color:#182230;">.</span></td>
-          </tr>
-          <tr>
-            <td style="padding:32px 24px;background-color:#ffffff;border:1px solid #e4e7ec;border-top:4px solid #4f46e5;border-radius:12px;">
-              <p style="margin:0 0 12px;color:#4338ca;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Customer Support Response</p>
-              <h1 style="margin:0 0 16px;font-size:24px;line-height:32px;font-weight:700;color:#182230;">{{subject}}</h1>
-              <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#475467;">Hello <strong>{{name}}</strong>,</p>
-              <p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#475467;">Thank you for contacting us. Here is our response to your message:</p>
-              
-              <!-- Reply Message Box -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+            <td style="padding:24px 32px;background-color:#4338ca;border-bottom:1px solid #3730a3;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
-                  <td style="padding:20px;background-color:#f8fafc;border-left:4px solid #4f46e5;border-radius:6px;font-size:15px;line-height:26px;color:#1e293b;white-space:pre-wrap;">{{replyMessage}}</td>
+                  <td>
+                    <span style="font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">korot<span style="color:#a5b4fc;">.</span></span>
+                    <span style="display:block;font-size:12px;color:#c7d2fe;margin-top:2px;letter-spacing:0.5px;text-transform:uppercase;">Multilingual &amp; Indigenous Language Preservation</span>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    <span style="display:inline-block;padding:4px 10px;background-color:#3730a3;border:1px solid #6366f1;border-radius:20px;font-size:11px;font-weight:600;color:#e0e7ff;">Ticket #{{ticketId}}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding:32px 32px 24px;">
+              <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:1px;color:#4f46e5;text-transform:uppercase;">Customer Support Response</p>
+              <h1 style="margin:0 0 20px;font-size:20px;line-height:28px;font-weight:700;color:#0f172a;">{{subject}}</h1>
+
+              <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hello <strong>{{name}}</strong>,</p>
+
+              <p style="margin:0 0 16px;font-size:15px;color:#334155;">
+                Thank you for contacting the <strong>KOROT Support Team</strong>. A member of our team has reviewed your inquiry and provided the response below:
+              </p>
+
+              <!-- Staff Response Card -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 24px;border:1px solid #c7d2fe;background-color:#f5f7ff;border-radius:8px;">
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e0e7ff;">
+                    <span style="font-size:13px;font-weight:700;color:#3730a3;">Response from {{responderName}}:</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 20px;font-size:15px;line-height:26px;color:#1e293b;white-space:pre-wrap;">{{replyMessage}}</td>
                 </tr>
               </table>
 
-              <!-- Original Message Section -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+              <!-- Original Inquiry Context -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 16px;border-top:1px dashed #cbd5e1;padding-top:20px;">
                 <tr>
-                  <td style="border-top:1px dashed #d0d5dd;padding-top:16px;">
-                    <p style="margin:0 0 8px;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.5px;color:#64748b;text-transform:uppercase;">Your Original Message</p>
-                    <div style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;font-size:14px;line-height:22px;color:#64748b;white-space:pre-wrap;">{{originalMessage}}</div>
+                  <td>
+                    <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.5px;color:#64748b;text-transform:uppercase;">Your Original Inquiry Details</p>
+                    
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;color:#475467;">
+                      <tr>
+                        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:110px;color:#64748b;font-weight:600;">Subject:</td>
+                        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#1e293b;">{{originalSubject}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;">Submitted by:</td>
+                        <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#1e293b;">{{recipientEmail}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 14px;color:#64748b;font-weight:600;vertical-align:top;">Message:</td>
+                        <td style="padding:12px 14px;color:#334155;white-space:pre-wrap;line-height:20px;">{{originalMessage}}</td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
               </table>
 
-              <p style="margin:0;font-size:15px;line-height:24px;color:#475467;">If you have any further questions or follow-up details, please feel free to reach back out to us.</p>
-              <p style="margin:20px 0 0;font-size:15px;line-height:24px;color:#475467;">Best regards,<br><strong>The KOROT Team</strong></p>
+              <p style="margin:20px 0 0;font-size:14px;color:#475467;">
+                If you have additional questions or need further clarification, simply reply to this email or visit our website.
+              </p>
+
+              <p style="margin:20px 0 0;font-size:14px;color:#334155;">
+                Warm regards,<br>
+                <strong>The KOROT Support Team</strong>
+              </p>
             </td>
           </tr>
+
+          <!-- Anti-Spam / Verification Footer -->
           <tr>
-            <td align="center" style="padding:20px 16px;font-size:12px;line-height:20px;color:#667085;">
-              This is an official response from KOROT regarding your inquiry.<br>
-              &copy; KOROT. All rights reserved.
+            <td style="padding:20px 32px 28px;background-color:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;line-height:18px;color:#64748b;">
+              <p style="margin:0 0 8px;">
+                <strong>Why did you receive this email?</strong> You are receiving this direct communication because an inquiry was submitted to KOROT via our contact form at <a href="https://korot.site" style="color:#4f46e5;text-decoration:none;">korot.site</a>.
+              </p>
+              <p style="margin:0 0 8px;">
+                Reference Ticket ID: <code>#{{ticketId}}</code> | Support Contact: <a href="mailto:support@korot.site" style="color:#4f46e5;text-decoration:none;">support@korot.site</a>
+              </p>
+              <p style="margin:0;color:#94a3b8;">
+                &copy; 2026 KOROT Platform. All rights reserved. Indigenous language preservation &amp; multilingual learning.
+              </p>
             </td>
           </tr>
+
         </table>
       </td>
     </tr>

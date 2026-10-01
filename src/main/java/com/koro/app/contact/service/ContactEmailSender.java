@@ -26,47 +26,93 @@ public class ContactEmailSender {
         this.from = from;
     }
 
-    public void sendReply(String toEmail, String recipientName, String subject, String replyMessage, String originalMessage) {
+    public void sendReply(String ticketId,
+                          String toEmail,
+                          String recipientName,
+                          String subject,
+                          String replyMessage,
+                          String originalSubject,
+                          String originalMessage,
+                          String responderName) {
+
         if (apiKey == null || apiKey.isBlank() || from == null || from.isBlank()) {
             log.warn("Resend API key or From address not configured. Email will not be sent to: {}", toEmail);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Email delivery is not configured on the server");
         }
 
         try {
-            String finalSubject = (subject != null && !subject.isBlank()) ? subject : "Response to your inquiry - KOROT Support";
+            String safeTicketId = (ticketId != null && !ticketId.isBlank()) ? ticketId : "KORO-INQ";
+            String safeSubject = (subject != null && !subject.isBlank()) ? subject : "Response to your inquiry";
+            String safeOriginalSubject = (originalSubject != null && !originalSubject.isBlank()) ? originalSubject : "(No Subject)";
             String safeName = (recipientName != null && !recipientName.isBlank()) ? recipientName : "Valued User";
-            String safeOriginal = (originalMessage != null) ? originalMessage : "(No content)";
+            String safeOriginalMessage = (originalMessage != null && !originalMessage.isBlank()) ? originalMessage : "(No content)";
+            String safeResponder = (responderName != null && !responderName.isBlank()) ? responderName : "KOROT Support Representative";
+
+            // Anti-spam subject format: Clearly branded with ticket ref
+            String emailSubject = safeSubject.startsWith("[KOROT") ? safeSubject : "[KOROT Support #" + safeTicketId + "] " + safeSubject;
 
             String html;
             try (var input = new ClassPathResource("templates/email/contact_reply.html").getInputStream()) {
                 html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             }
 
-            html = html.replace("{{subject}}", escapeHtml(finalSubject))
+            html = html.replace("{{subject}}", escapeHtml(safeSubject))
+                    .replace("{{ticketId}}", escapeHtml(safeTicketId))
                     .replace("{{name}}", escapeHtml(safeName))
+                    .replace("{{recipientEmail}}", escapeHtml(toEmail))
+                    .replace("{{responderName}}", escapeHtml(safeResponder))
                     .replace("{{replyMessage}}", escapeHtml(replyMessage))
-                    .replace("{{originalMessage}}", escapeHtml(safeOriginal));
+                    .replace("{{originalSubject}}", escapeHtml(safeOriginalSubject))
+                    .replace("{{originalMessage}}", escapeHtml(safeOriginalMessage));
 
-            String text = finalSubject + "\n\n"
+            // Clean, matching plain-text email version
+            String text = emailSubject + "\n\n"
                     + "Hello " + safeName + ",\n\n"
-                    + "Thank you for contacting us. Here is our response to your inquiry:\n\n"
-                    + replyMessage + "\n\n"
-                    + "----------------------------------------\n"
-                    + "Your Original Message:\n"
-                    + safeOriginal + "\n"
-                    + "----------------------------------------\n\n"
-                    + "Best regards,\nThe KOROT Team\n\n"
-                    + "This is an official response from KOROT.";
+                    + "Thank you for contacting the KOROT Support Team.\n"
+                    + "A member of our team has reviewed your inquiry and provided the response below:\n\n"
+                    + "============================================================\n"
+                    + "Response from " + safeResponder + ":\n\n"
+                    + replyMessage + "\n"
+                    + "============================================================\n\n"
+                    + "------------------------------------------------------------\n"
+                    + "YOUR ORIGINAL INQUIRY DETAILS\n"
+                    + "Ticket ID: #" + safeTicketId + "\n"
+                    + "Subject: " + safeOriginalSubject + "\n"
+                    + "Submitted by: " + toEmail + "\n\n"
+                    + "Original Message:\n"
+                    + safeOriginalMessage + "\n"
+                    + "------------------------------------------------------------\n\n"
+                    + "If you have additional questions or need further clarification, simply reply to this email or visit https://korot.site.\n\n"
+                    + "Warm regards,\n"
+                    + "The KOROT Support Team\n\n"
+                    + "---\n"
+                    + "Why did you receive this email? You are receiving this direct communication because an inquiry was submitted to KOROT via our contact form at korot.site.\n"
+                    + "Support Contact: support@korot.site | (c) 2026 KOROT Platform";
 
-            new Resend(apiKey).emails().send(CreateEmailOptions.builder()
-                    .from(from)
+            // Determine formatted From and Reply-To
+            String senderFrom = from;
+            if (!senderFrom.contains("<") && !senderFrom.toLowerCase().contains("korot")) {
+                senderFrom = "KOROT Support <" + from.trim() + ">";
+            }
+
+            // Extract email address for reply-to
+            String replyToEmail = from;
+            if (from.contains("<") && from.contains(">")) {
+                replyToEmail = from.substring(from.indexOf("<") + 1, from.indexOf(">")).trim();
+            }
+
+            CreateEmailOptions.Builder emailBuilder = CreateEmailOptions.builder()
+                    .from(senderFrom)
                     .to(toEmail)
-                    .subject(finalSubject)
+                    .replyTo(replyToEmail)
+                    .subject(emailSubject)
                     .html(html)
                     .text(text)
-                    .build());
+                    .addHeader("X-Entity-Ref-ID", safeTicketId);
 
-            log.info("Contact reply email sent successfully to {}", toEmail);
+            new Resend(apiKey).emails().send(emailBuilder.build());
+
+            log.info("Contact reply email sent successfully to {} with Ticket #{}", toEmail, safeTicketId);
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception ex) {

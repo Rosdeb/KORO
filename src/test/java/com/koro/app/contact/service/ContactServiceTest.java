@@ -162,11 +162,14 @@ class ContactServiceTest {
         ContactMessageResponse response = contactService.replyToMessage("msg-123", replyRequest, adminUser);
 
         verify(contactEmailSender).sendReply(
+                eq("msg-123"),
                 eq("jane@example.com"),
                 eq("Jane Doe"),
                 eq("Re: Santali language question"),
                 eq("Yes, we do support Santali!"),
-                eq("Do you support Santali language?")
+                eq("Question about language support"),
+                eq("Do you support Santali language?"),
+                eq("Admin User")
         );
 
         assertEquals(ContactStatus.REPLIED, response.getStatus());

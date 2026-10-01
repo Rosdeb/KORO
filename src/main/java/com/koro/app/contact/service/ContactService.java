@@ -104,13 +104,23 @@ public class ContactService {
 
         String replyContent = request.getMessage().trim();
 
-        // 1. Send the actual email via Resend
+        String adminName = null;
+        if (adminUser != null) {
+            adminName = (adminUser.getName() != null && !adminUser.getName().isBlank())
+                    ? adminUser.getName()
+                    : adminUser.getEmail();
+        }
+
+        // 1. Send the actual email via Resend with anti-spam context & ticket reference
         contactEmailSender.sendReply(
+                message.getId(),
                 message.getEmail(),
                 message.getName(),
                 subject,
                 replyContent,
-                message.getMessage()
+                message.getSubject(),
+                message.getMessage(),
+                adminName
         );
 
         // 2. Record reply in database
@@ -120,9 +130,6 @@ public class ContactService {
         message.setStatus(ContactStatus.REPLIED);
 
         if (adminUser != null) {
-            String adminName = (adminUser.getName() != null && !adminUser.getName().isBlank())
-                    ? adminUser.getName()
-                    : adminUser.getEmail();
             message.setRepliedBy(adminName);
             message.setRepliedByUserId(adminUser.getId());
         }
