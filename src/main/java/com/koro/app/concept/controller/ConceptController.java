@@ -5,6 +5,7 @@ import com.koro.app.concept.entity.Category;
 import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.CategoryRepository;
 import com.koro.app.concept.repository.ConceptRepository;
+import com.koro.app.concept.service.ConceptReadService;
 import com.koro.app.translation.repository.TranslationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -28,6 +29,9 @@ public class ConceptController {
 
     @Autowired
     private ConceptRepository conceptRepository;
+
+    @Autowired
+    private ConceptReadService conceptReadService;
 
     @Autowired
     private TranslationRepository translationRepository;
@@ -110,7 +114,7 @@ public class ConceptController {
 
     @GetMapping("/concepts/{id}")
     public ResponseEntity<?> getConceptById(@PathVariable String id) {
-        return conceptRepository.findById(id)
+        return conceptReadService.findById(id)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
