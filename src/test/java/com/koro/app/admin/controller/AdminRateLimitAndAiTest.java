@@ -2,8 +2,12 @@ package com.koro.app.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.koro.app.translation.dto.RateLimitConfigDto;
+import com.koro.app.translation.dto.UserRateLimitDto;
+import com.koro.app.translation.dto.UserRateLimitUpdateRequest;
 import com.koro.app.translation.service.GeminiMultiModelService;
 import com.koro.app.translation.service.TranslationRateLimitService;
+import com.koro.app.user.entity.User;
+import com.koro.app.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -31,6 +36,9 @@ class AdminRateLimitAndAiTest {
 
     @Mock
     private GeminiMultiModelService geminiMultiModelService;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private AdminController adminController;
@@ -98,5 +106,66 @@ class AdminRateLimitAndAiTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("AI models updated successfully"));
+    }
+
+    @Test
+    void getUserRateLimitReturnsDtoWhenUserExists() throws Exception {
+        User user = User.builder().id("user-1").name("Alice").email("alice@example.com").build();
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        UserRateLimitDto dto = new UserRateLimitDto("user-1", "Alice", "alice@example.com",
+                2, 50, 48, 10, 500, 490, null, null, null);
+        when(translationRateLimitService.getUserRateLimit(user)).thenReturn(dto);
+
+        mockMvc.perform(get("/api/v1/admin/rate-limits/users/user-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value("user-1"))
+                .andExpect(jsonPath("$.userName").value("Alice"))
+                .andExpect(jsonPath("$.dailyLimit").value(50))
+                .andExpect(jsonPath("$.dailyRemaining").value(48))
+                .andExpect(jsonPath("$.monthlyLimit").value(500))
+                .andExpect(jsonPath("$.monthlyRemaining").value(490));
+    }
+
+    @Test
+    void getUserRateLimitReturns404WhenUserNotFound() throws Exception {
+        when(userRepository.findById("unknown-user")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/admin/rate-limits/users/unknown-user"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateUserRateLimitUpdatesAndReturnsDtoWhenUserExists() throws Exception {
+        User user = User.builder().id("user-1").name("Alice").email("alice@example.com").build();
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        UserRateLimitDto dto = new UserRateLimitDto("user-1", "Alice", "alice@example.com",
+                0, 100, 100, 0, 1000, 1000, 100, 1000, null);
+        when(translationRateLimitService.updateUserRateLimit(any(User.class), any(UserRateLimitUpdateRequest.class)))
+                .thenReturn(dto);
+
+        UserRateLimitUpdateRequest req = new UserRateLimitUpdateRequest(100, 1000, true, true);
+
+        mockMvc.perform(put("/api/v1/admin/rate-limits/users/user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value("user-1"))
+                .andExpect(jsonPath("$.dailyLimit").value(100))
+                .andExpect(jsonPath("$.customDailyLimit").value(100))
+                .andExpect(jsonPath("$.customMonthlyLimit").value(1000));
+    }
+
+    @Test
+    void updateUserRateLimitReturns404WhenUserNotFound() throws Exception {
+        when(userRepository.findById("unknown-user")).thenReturn(Optional.empty());
+
+        UserRateLimitUpdateRequest req = new UserRateLimitUpdateRequest(100, 1000, false, false);
+
+        mockMvc.perform(put("/api/v1/admin/rate-limits/users/unknown-user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isNotFound());
     }
 }

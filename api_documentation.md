@@ -665,3 +665,44 @@ Access: `ROLE_ADMIN`
 ```
 If a model in the roster reaches its daily quota or minute rate limit (HTTP 429), the backend automatically and seamlessly fails over to the next model in the list.
 
+### 5. Get User Search Rate Limit & Usage
+* **`GET /api/v1/admin/rate-limits/users/{userId}`**
+* **Access**: `ROLE_ADMIN`
+* **Response** (`200 OK`):
+```json
+{
+  "userId": "64e0a7f123456789abcdef01",
+  "userName": "John Doe",
+  "userEmail": "john@example.com",
+  "dailyCount": 12,
+  "dailyLimit": 50,
+  "dailyRemaining": 38,
+  "monthlyCount": 145,
+  "monthlyLimit": 500,
+  "monthlyRemaining": 355,
+  "customDailyLimit": null,
+  "customMonthlyLimit": null,
+  "lastSearchAt": "2026-11-26T04:12:00Z"
+}
+```
+
+### 6. Update User Search Rate Limit & Quota Overrides
+* **`PUT /api/v1/admin/rate-limits/users/{userId}`**
+* **Access**: `ROLE_ADMIN`
+* **Request Body**:
+```json
+{
+  "customDailyLimit": 200,
+  "customMonthlyLimit": 2000,
+  "resetDailyCount": false,
+  "resetMonthlyCount": false
+}
+```
+* **Response** (`200 OK`):
+Returns the updated `UserRateLimitDto`.
+> **Note**:
+> - Setting `customDailyLimit` or `customMonthlyLimit` to `0` or negative removes the custom limit and restores the default system limit.
+> - Setting `resetDailyCount: true` resets today's search counter back to `0`.
+> - Setting `resetMonthlyCount: true` resets this month's search counter back to `0`.
+
+

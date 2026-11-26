@@ -24,6 +24,9 @@ public class SearchRateLimit {
     private String monthlyMonth; // "YYYY-MM" in UTC
     private int monthlyCount;
 
+    private Integer customDailyLimit; // Custom limit set by Admin (null if using default)
+    private Integer customMonthlyLimit; // Custom limit set by Admin (null if using default)
+
     private Instant lastSearchAt;
 
     @LastModifiedDate
@@ -33,7 +36,8 @@ public class SearchRateLimit {
     }
 
     public SearchRateLimit(String id, String identifier, String type, String dailyDate, int dailyCount,
-                           String monthlyMonth, int monthlyCount, Instant lastSearchAt, Instant updatedAt) {
+                           String monthlyMonth, int monthlyCount, Integer customDailyLimit, Integer customMonthlyLimit,
+                           Instant lastSearchAt, Instant updatedAt) {
         this.id = id;
         this.identifier = identifier;
         this.type = type;
@@ -41,6 +45,8 @@ public class SearchRateLimit {
         this.dailyCount = dailyCount;
         this.monthlyMonth = monthlyMonth;
         this.monthlyCount = monthlyCount;
+        this.customDailyLimit = customDailyLimit;
+        this.customMonthlyLimit = customMonthlyLimit;
         this.lastSearchAt = lastSearchAt;
         this.updatedAt = updatedAt;
     }
@@ -57,6 +63,8 @@ public class SearchRateLimit {
         private int dailyCount;
         private String monthlyMonth;
         private int monthlyCount;
+        private Integer customDailyLimit;
+        private Integer customMonthlyLimit;
         private Instant lastSearchAt;
         private Instant updatedAt;
 
@@ -95,6 +103,16 @@ public class SearchRateLimit {
             return this;
         }
 
+        public Builder customDailyLimit(Integer customDailyLimit) {
+            this.customDailyLimit = customDailyLimit;
+            return this;
+        }
+
+        public Builder customMonthlyLimit(Integer customMonthlyLimit) {
+            this.customMonthlyLimit = customMonthlyLimit;
+            return this;
+        }
+
         public Builder lastSearchAt(Instant lastSearchAt) {
             this.lastSearchAt = lastSearchAt;
             return this;
@@ -107,7 +125,7 @@ public class SearchRateLimit {
 
         public SearchRateLimit build() {
             return new SearchRateLimit(id, identifier, type, dailyDate, dailyCount,
-                    monthlyMonth, monthlyCount, lastSearchAt, updatedAt);
+                    monthlyMonth, monthlyCount, customDailyLimit, customMonthlyLimit, lastSearchAt, updatedAt);
         }
     }
 
@@ -165,6 +183,22 @@ public class SearchRateLimit {
 
     public void setMonthlyCount(int monthlyCount) {
         this.monthlyCount = monthlyCount;
+    }
+
+    public Integer getCustomDailyLimit() {
+        return customDailyLimit;
+    }
+
+    public void setCustomDailyLimit(Integer customDailyLimit) {
+        this.customDailyLimit = customDailyLimit;
+    }
+
+    public Integer getCustomMonthlyLimit() {
+        return customMonthlyLimit;
+    }
+
+    public void setCustomMonthlyLimit(Integer customMonthlyLimit) {
+        this.customMonthlyLimit = customMonthlyLimit;
     }
 
     public Instant getLastSearchAt() {

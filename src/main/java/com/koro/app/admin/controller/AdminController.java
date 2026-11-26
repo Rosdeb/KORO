@@ -6,6 +6,8 @@ import com.koro.app.language.repository.LanguageRepository;
 import com.koro.app.submission.entity.SubmissionStatus;
 import com.koro.app.submission.repository.TranslationSubmissionRepository;
 import com.koro.app.translation.dto.RateLimitConfigDto;
+import com.koro.app.translation.dto.UserRateLimitDto;
+import com.koro.app.translation.dto.UserRateLimitUpdateRequest;
 import com.koro.app.translation.repository.TranslationRepository;
 import com.koro.app.translation.service.GeminiMultiModelService;
 import com.koro.app.translation.service.TranslationRateLimitService;
@@ -128,6 +130,22 @@ public class AdminController {
     @PutMapping("/rate-limits/search")
     public ResponseEntity<RateLimitConfigDto> updateSearchRateLimits(@RequestBody RateLimitConfigDto dto) {
         return ResponseEntity.ok(translationRateLimitService.updateConfig(dto));
+    }
+
+    @GetMapping("/rate-limits/users/{userId}")
+    public ResponseEntity<UserRateLimitDto> getUserRateLimit(@PathVariable String userId) {
+        return userRepository.findById(userId)
+                .map(user -> ResponseEntity.ok(translationRateLimitService.getUserRateLimit(user)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/rate-limits/users/{userId}")
+    public ResponseEntity<UserRateLimitDto> updateUserRateLimit(
+            @PathVariable String userId,
+            @RequestBody UserRateLimitUpdateRequest request) {
+        return userRepository.findById(userId)
+                .map(user -> ResponseEntity.ok(translationRateLimitService.updateUserRateLimit(user, request)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/ai/models")

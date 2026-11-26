@@ -3,8 +3,11 @@ package com.koro.app.translation.service;
 import com.koro.app.auth.security.CustomUserDetails;
 import com.koro.app.translation.dto.RateLimitConfigDto;
 import com.koro.app.translation.dto.RateLimitResult;
+import com.koro.app.translation.dto.UserRateLimitDto;
+import com.koro.app.translation.dto.UserRateLimitUpdateRequest;
 import com.koro.app.translation.entity.SearchRateLimit;
 import com.koro.app.translation.repository.SearchRateLimitRepository;
+import com.koro.app.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,6 +110,16 @@ public class TranslationRateLimitService {
                 record.setMonthlyCount(0);
             }
 
+            // Apply custom limit overrides if configured for this user
+            if ("USER".equals(type)) {
+                if (record.getCustomDailyLimit() != null && record.getCustomDailyLimit() > 0) {
+                    dailyLimit = record.getCustomDailyLimit();
+                }
+                if (record.getCustomMonthlyLimit() != null && record.getCustomMonthlyLimit() > 0) {
+                    monthlyLimit = record.getCustomMonthlyLimit();
+                }
+            }
+
             // Check if daily quota is reached
             if (record.getDailyCount() >= dailyLimit) {
                 String message = "USER".equals(type)
@@ -180,6 +193,117 @@ public class TranslationRateLimitService {
             if (dto.getAnonMonthlyLimit() > 0) this.anonMonthlyLimit = dto.getAnonMonthlyLimit();
         }
         return getConfig();
+    }
+
+    public UserRateLimitDto getUserRateLimit(User user) {
+        String identifierKey = "USER:" + user.getId();
+        String today = LocalDate.now(ZoneOffset.UTC).toString();
+        String currentMonth = today.substring(0, 7);
+
+        SearchRateLimit record = searchRateLimitRepository.findById(identifierKey).orElse(null);
+
+        int effectiveDailyLimit = (record != null && record.getCustomDailyLimit() != null && record.getCustomDailyLimit() > 0)
+                ? record.getCustomDailyLimit()
+                : userDailyLimit;
+
+        int effectiveMonthlyLimit = (record != null && record.getCustomMonthlyLimit() != null && record.getCustomMonthlyLimit() > 0)
+                ? record.getCustomMonthlyLimit()
+                : userMonthlyLimit;
+
+        int dailyCount = 0;
+        int monthlyCount = 0;
+        Integer customDailyLimit = null;
+        Integer customMonthlyLimit = null;
+        Instant lastSearchAt = null;
+
+        if (record != null) {
+            if (today.equals(record.getDailyDate())) {
+                dailyCount = record.getDailyCount();
+            }
+            if (currentMonth.equals(record.getMonthlyMonth())) {
+                monthlyCount = record.getMonthlyCount();
+            }
+            customDailyLimit = record.getCustomDailyLimit();
+            customMonthlyLimit = record.getCustomMonthlyLimit();
+            lastSearchAt = record.getLastSearchAt();
+        }
+
+        int dailyRemaining = Math.max(0, effectiveDailyLimit - dailyCount);
+        int monthlyRemaining = Math.max(0, effectiveMonthlyLimit - monthlyCount);
+
+        return new UserRateLimitDto(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                dailyCount,
+                effectiveDailyLimit,
+                dailyRemaining,
+                monthlyCount,
+                effectiveMonthlyLimit,
+                monthlyRemaining,
+                customDailyLimit,
+                customMonthlyLimit,
+                lastSearchAt
+        );
+    }
+
+    public UserRateLimitDto updateUserRateLimit(User user, UserRateLimitUpdateRequest request) {
+        String identifierKey = "USER:" + user.getId();
+        String today = LocalDate.now(ZoneOffset.UTC).toString();
+        String currentMonth = today.substring(0, 7);
+
+        synchronized (identifierKey.intern()) {
+            SearchRateLimit record = searchRateLimitRepository.findById(identifierKey)
+                    .orElseGet(() -> SearchRateLimit.builder()
+                            .id(identifierKey)
+                            .identifier(user.getId())
+                            .type("USER")
+                            .dailyDate(today)
+                            .dailyCount(0)
+                            .monthlyMonth(currentMonth)
+                            .monthlyCount(0)
+                            .build());
+
+            // Reset date buckets if outdated
+            if (!today.equals(record.getDailyDate())) {
+                record.setDailyDate(today);
+                record.setDailyCount(0);
+            }
+            if (!currentMonth.equals(record.getMonthlyMonth())) {
+                record.setMonthlyMonth(currentMonth);
+                record.setMonthlyCount(0);
+            }
+
+            if (request != null) {
+                // Update custom limits (<= 0 clears the custom limit override)
+                if (request.getCustomDailyLimit() != null) {
+                    if (request.getCustomDailyLimit() > 0) {
+                        record.setCustomDailyLimit(request.getCustomDailyLimit());
+                    } else {
+                        record.setCustomDailyLimit(null);
+                    }
+                }
+
+                if (request.getCustomMonthlyLimit() != null) {
+                    if (request.getCustomMonthlyLimit() > 0) {
+                        record.setCustomMonthlyLimit(request.getCustomMonthlyLimit());
+                    } else {
+                        record.setCustomMonthlyLimit(null);
+                    }
+                }
+
+                if (request.isResetDailyCount()) {
+                    record.setDailyCount(0);
+                }
+
+                if (request.isResetMonthlyCount()) {
+                    record.setMonthlyCount(0);
+                }
+            }
+
+            searchRateLimitRepository.save(record);
+            return getUserRateLimit(user);
+        }
     }
 
     public boolean isEnabled() { return enabled; }
