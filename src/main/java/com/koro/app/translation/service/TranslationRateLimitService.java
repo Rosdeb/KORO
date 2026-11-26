@@ -48,7 +48,19 @@ public class TranslationRateLimitService {
         this.searchRateLimitRepository = searchRateLimitRepository;
     }
 
+    public RateLimitResult checkSearchQuota(HttpServletRequest request) {
+        return processSearchQuota(request, false);
+    }
+
+    public RateLimitResult consumeSearchQuota(HttpServletRequest request) {
+        return processSearchQuota(request, true);
+    }
+
     public RateLimitResult checkAndConsumeSearchQuota(HttpServletRequest request) {
+        return processSearchQuota(request, true);
+    }
+
+    private RateLimitResult processSearchQuota(HttpServletRequest request, boolean consume) {
         if (!enabled) {
             return RateLimitResult.allowed(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
         }
@@ -136,11 +148,13 @@ public class TranslationRateLimitService {
                 return RateLimitResult.denied(message, dailyLimit, Math.max(0, dailyLimit - record.getDailyCount()), monthlyLimit, 0);
             }
 
-            // Increment and persist
-            record.setDailyCount(record.getDailyCount() + 1);
-            record.setMonthlyCount(record.getMonthlyCount() + 1);
-            record.setLastSearchAt(Instant.now());
-            searchRateLimitRepository.save(record);
+            // Increment and persist only when consuming quota
+            if (consume) {
+                record.setDailyCount(record.getDailyCount() + 1);
+                record.setMonthlyCount(record.getMonthlyCount() + 1);
+                record.setLastSearchAt(Instant.now());
+                searchRateLimitRepository.save(record);
+            }
 
             int remainingDaily = dailyLimit - record.getDailyCount();
             int remainingMonthly = monthlyLimit - record.getMonthlyCount();

@@ -222,6 +222,7 @@ See [Email OTP setup and frontend flow](AUTH_EMAIL_VERIFICATION.md) for configur
         *   **Logged-in users**: 50 searches / day, 500 searches / month (configurable via `SEARCH_USER_DAILY_LIMIT` and `SEARCH_USER_MONTHLY_LIMIT`).
         *   **Guest / Anonymous visitors**: 15 searches / day, 150 searches / month per IP address (supports Cloudflare `CF-Connecting-IP`, `X-Forwarded-For`; configurable via `SEARCH_ANON_DAILY_LIMIT` and `SEARCH_ANON_MONTHLY_LIMIT`).
         *   **Admin / Moderator**: Exempt from rate limits.
+        *   **Zero-Result Search Protection**: Searches that return empty results (`[]`) or `null` (no matching translation or sentence found) do **not** consume search quota. Quota is only consumed when valid translations are found and returned.
     *   **Response Headers**:
         *   `X-RateLimit-Limit-Daily`: Daily search quota.
         *   `X-RateLimit-Remaining-Daily`: Searches remaining for today (UTC).

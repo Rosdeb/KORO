@@ -47,6 +47,23 @@ class TranslationRateLimitServiceTest {
     }
 
     @Test
+    void checkSearchQuotaDoesNotSaveOrIncrementCounter() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("192.168.1.100");
+
+        when(searchRateLimitRepository.findById("IP:192.168.1.100")).thenReturn(Optional.empty());
+
+        RateLimitResult result = service.checkSearchQuota(request);
+
+        assertTrue(result.isAllowed());
+        assertEquals(2, result.getDailyLimit());
+        assertEquals(2, result.getDailyRemaining());
+        assertEquals(10, result.getMonthlyLimit());
+        assertEquals(10, result.getMonthlyRemaining());
+        verify(searchRateLimitRepository, never()).save(any(SearchRateLimit.class));
+    }
+
+    @Test
     void anonymousUserAllowedUnderLimit() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("192.168.1.100");

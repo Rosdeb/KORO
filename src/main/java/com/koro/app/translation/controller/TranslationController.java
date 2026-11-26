@@ -555,7 +555,7 @@ public class TranslationController {
                     .body("Query string is empty");
         }
 
-        RateLimitResult rateLimit = translationRateLimitService.checkAndConsumeSearchQuota(servletRequest);
+        RateLimitResult rateLimit = translationRateLimitService.checkSearchQuota(servletRequest);
         if (!rateLimit.isAllowed()) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .header("X-RateLimit-Limit-Daily", String.valueOf(rateLimit.getDailyLimit()))
@@ -851,6 +851,15 @@ public class TranslationController {
                     )
                     .map(TranslationResponse::fromTranslation)
                     .collect(Collectors.toList());
+        }
+
+        /*
+         * If search returned valid results, consume 1 search from quota.
+         * If results are empty or null, quota is NOT consumed.
+         */
+        boolean hasResults = finalResponses != null && !finalResponses.isEmpty();
+        if (hasResults) {
+            rateLimit = translationRateLimitService.consumeSearchQuota(servletRequest);
         }
 
         /*
