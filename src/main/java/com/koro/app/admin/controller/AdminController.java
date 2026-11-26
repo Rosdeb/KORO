@@ -5,7 +5,10 @@ import com.koro.app.concept.repository.ConceptRepository;
 import com.koro.app.language.repository.LanguageRepository;
 import com.koro.app.submission.entity.SubmissionStatus;
 import com.koro.app.submission.repository.TranslationSubmissionRepository;
+import com.koro.app.translation.dto.RateLimitConfigDto;
 import com.koro.app.translation.repository.TranslationRepository;
+import com.koro.app.translation.service.GeminiMultiModelService;
+import com.koro.app.translation.service.TranslationRateLimitService;
 import com.koro.app.user.dto.UserResponse;
 import com.koro.app.user.entity.Role;
 import com.koro.app.user.entity.User;
@@ -46,6 +49,12 @@ public class AdminController {
 
     @Autowired
     private ActivityLogRepository activityLogRepository;
+
+    @Autowired
+    private TranslationRateLimitService translationRateLimitService;
+
+    @Autowired
+    private GeminiMultiModelService geminiMultiModelService;
 
     @GetMapping("/statistics")
     public ResponseEntity<?> getDashboardStatistics() {
@@ -109,5 +118,39 @@ public class AdminController {
                     return ResponseEntity.ok(response);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/rate-limits/search")
+    public ResponseEntity<RateLimitConfigDto> getSearchRateLimits() {
+        return ResponseEntity.ok(translationRateLimitService.getConfig());
+    }
+
+    @PutMapping("/rate-limits/search")
+    public ResponseEntity<RateLimitConfigDto> updateSearchRateLimits(@RequestBody RateLimitConfigDto dto) {
+        return ResponseEntity.ok(translationRateLimitService.updateConfig(dto));
+    }
+
+    @GetMapping("/ai/models")
+    public ResponseEntity<Map<String, Object>> getAiModels() {
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("models", geminiMultiModelService.getModels());
+        resp.put("enabled", geminiMultiModelService.isEnabled());
+        return ResponseEntity.ok(resp);
+    }
+
+    @PutMapping("/ai/models")
+    public ResponseEntity<Map<String, Object>> updateAiModels(@RequestBody Map<String, Object> body) {
+        if (body.containsKey("models") && body.get("models") instanceof List<?> list) {
+            List<String> newModels = list.stream().map(Object::toString).toList();
+            geminiMultiModelService.setModels(newModels);
+        }
+        if (body.containsKey("enabled") && body.get("enabled") instanceof Boolean b) {
+            geminiMultiModelService.setEnabled(b);
+        }
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("models", geminiMultiModelService.getModels());
+        resp.put("enabled", geminiMultiModelService.isEnabled());
+        resp.put("message", "AI models updated successfully");
+        return ResponseEntity.ok(resp);
     }
 }

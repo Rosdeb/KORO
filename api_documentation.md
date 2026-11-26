@@ -215,7 +215,28 @@ See [Email OTP setup and frontend flow](AUTH_EMAIL_VERIFICATION.md) for configur
 
 ### List / Search Translations
 *   **URL**: `/api/v1/translations` (`GET`), `/api/v1/translations/search` (`POST`)
-*   **Access**: `GET` is public; `POST /search` requires authentication (any role)
+*   **Access**: `GET` is public; `POST /search` is open to authenticated users and guests, protected by **Search Rate Limiting / Usage Quota**.
+*   **Rate Limiting & Privacy Protection**:
+    *   Protects the Koch dictionary and sentence corpus from automated scrapers / full-corpus extraction prior to book publication.
+    *   **Limits**:
+        *   **Logged-in users**: 50 searches / day, 500 searches / month (configurable via `SEARCH_USER_DAILY_LIMIT` and `SEARCH_USER_MONTHLY_LIMIT`).
+        *   **Guest / Anonymous visitors**: 15 searches / day, 150 searches / month per IP address (supports Cloudflare `CF-Connecting-IP`, `X-Forwarded-For`; configurable via `SEARCH_ANON_DAILY_LIMIT` and `SEARCH_ANON_MONTHLY_LIMIT`).
+        *   **Admin / Moderator**: Exempt from rate limits.
+    *   **Response Headers**:
+        *   `X-RateLimit-Limit-Daily`: Daily search quota.
+        *   `X-RateLimit-Remaining-Daily`: Searches remaining for today (UTC).
+        *   `X-RateLimit-Limit-Monthly`: Monthly search quota.
+        *   `X-RateLimit-Remaining-Monthly`: Searches remaining for current month (UTC).
+    *   **Rate Limit Exceeded (HTTP 429)**:
+        *   Returns `429 Too Many Requests` with `{ "message": "Daily search limit of 50 reached. Please try again tomorrow." }`.
+*   **Sentence Tokenization & Ranking Engine**:
+    *   In-memory inverted index tokenizes sentences and multi-word queries.
+    *   Finds matching sentences even when partial words are matched (e.g. `nang biting` -> matches `nang biting tongto ke?`).
+    *   Scores results: Exact sentence (100) > Exact phrase (90) > Token coverage 100% (80) > 75% (60) > 50% (40) > 25% (25) + Word order bigram bonus (+5).
+*   **AI Multi-Model Fallback**:
+    *   When no exact or sentence match is found in the database, automatically queries Google Gemini with multi-model failover.
+    *   If model 1 hits rate limit / quota (HTTP 429), it automatically fails over to model 2, model 3, etc. without error to the user.
+    *   Returns the same `TranslationResponse` contract.
 *   **Search request body**: `{ "query": "...", "sourceLanguageId": "...", "targetLanguageId": "..." }` — only `query` is required.
     *   `sourceLanguageId` + `targetLanguageId`: cross-language lookup — match `query` in the source language, return the matching concepts' entries in the target language.
     *   `targetLanguageId` only: search within that one language.
@@ -590,3 +611,57 @@ The response is now an object instead of a plain array; clients must read `conte
 
 Activity requests do not delete history. Older activities remain available through date
 filters and pagination, and activity statistics count all stored history.
+
+---
+
+## 10. Admin Search Rate Limit & AI Multi-Model Management
+
+Access: `ROLE_ADMIN`
+
+### 1. Get Search Rate Limits
+* **`GET /api/v1/admin/rate-limits/search`**
+* **Response** (`200 OK`):
+```json
+{
+  "enabled": true,
+  "userDailyLimit": 50,
+  "userMonthlyLimit": 500,
+  "anonDailyLimit": 15,
+  "anonMonthlyLimit": 150
+}
+```
+
+### 2. Update Search Rate Limits Dynamically
+* **`PUT /api/v1/admin/rate-limits/search`**
+* **Request Body**:
+```json
+{
+  "enabled": true,
+  "userDailyLimit": 100,
+  "userMonthlyLimit": 1000,
+  "anonDailyLimit": 25,
+  "anonMonthlyLimit": 250
+}
+```
+
+### 3. Get AI Multi-Model Roster
+* **`GET /api/v1/admin/ai/models`**
+* **Response** (`200 OK`):
+```json
+{
+  "models": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+  "enabled": true
+}
+```
+
+### 4. Update AI Multi-Model Roster Dynamically
+* **`PUT /api/v1/admin/ai/models`**
+* **Request Body**:
+```json
+{
+  "models": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-2.5-flash"],
+  "enabled": true
+}
+```
+If a model in the roster reaches its daily quota or minute rate limit (HTTP 429), the backend automatically and seamlessly fails over to the next model in the list.
+

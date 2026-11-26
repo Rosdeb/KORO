@@ -265,14 +265,22 @@ import com.koro.app.concept.entity.Concept;
 import com.koro.app.concept.repository.ConceptRepository;
 import com.koro.app.language.entity.Language;
 import com.koro.app.language.repository.LanguageRepository;
+import com.koro.app.translation.dto.RateLimitResult;
 import com.koro.app.translation.dto.TranslationResponse;
+import com.koro.app.translation.dto.TranslationSearchRequest;
 import com.koro.app.translation.entity.Translation;
 import com.koro.app.translation.repository.TranslationRepository;
+import com.koro.app.translation.service.GeminiMultiModelService;
+import com.koro.app.translation.service.SentenceSearchService;
+import com.koro.app.translation.service.TranslationRateLimitService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -298,6 +306,15 @@ public class TranslationController {
 
     @Autowired
     private ActivityLogService activityLogService;
+
+    @Autowired
+    private TranslationRateLimitService translationRateLimitService;
+
+    @Autowired
+    private SentenceSearchService sentenceSearchService;
+
+    @Autowired
+    private GeminiMultiModelService geminiMultiModelService;
 
     /*
      * ============================================================
@@ -435,6 +452,10 @@ public class TranslationController {
 
         pronunciationIndex.clear();
         pronunciationIndex.putAll(newPronunciationIndex);
+
+        if (sentenceSearchService != null) {
+            sentenceSearchService.rebuildTokenIndex(allTranslations);
+        }
     }
 
     /*
@@ -521,8 +542,10 @@ public class TranslationController {
 
     @PostMapping("/translations/search")
     public ResponseEntity<?> searchTranslations(
-            @RequestBody TranslationSearchRequest request) {
+            @RequestBody TranslationSearchRequest request,
+            HttpServletRequest servletRequest) {
 
+        String rawQuery = request.getQuery() != null ? request.getQuery().trim() : "";
         String query = TextNormalizer.normalize(
                 request.getQuery()
         );
@@ -530,6 +553,16 @@ public class TranslationController {
         if (query == null || query.isEmpty()) {
             return ResponseEntity.badRequest()
                     .body("Query string is empty");
+        }
+
+        RateLimitResult rateLimit = translationRateLimitService.checkAndConsumeSearchQuota(servletRequest);
+        if (!rateLimit.isAllowed()) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .header("X-RateLimit-Limit-Daily", String.valueOf(rateLimit.getDailyLimit()))
+                    .header("X-RateLimit-Remaining-Daily", String.valueOf(rateLimit.getDailyRemaining()))
+                    .header("X-RateLimit-Limit-Monthly", String.valueOf(rateLimit.getMonthlyLimit()))
+                    .header("X-RateLimit-Remaining-Monthly", String.valueOf(rateLimit.getMonthlyRemaining()))
+                    .body(new MessageResponse(rateLimit.getMessage()));
         }
 
         query = normalizeForSearch(query);
@@ -545,6 +578,21 @@ public class TranslationController {
          */
         Map<String, Translation> matches =
                 new LinkedHashMap<>();
+
+        /*
+         * 1. Sentence tokenization & ranked candidate search
+         */
+        if (sentenceSearchService != null) {
+            List<Translation> sentenceMatches = sentenceSearchService.searchSentences(
+                    rawQuery,
+                    sourceLanguageId,
+                    targetLanguageId,
+                    translationRepository
+            );
+            for (Translation st : sentenceMatches) {
+                putMatch(matches, st);
+            }
+        }
 
         /*
          * ========================================================
@@ -771,18 +819,45 @@ public class TranslationController {
         );
 
         /*
+         * 3. AI Multi-Model Fallback:
+         * If no matching words or sentences were found in the database,
+         * automatically query Google Gemini models in failover order.
+         */
+        List<TranslationResponse> finalResponses;
+        if (matches.isEmpty() && geminiMultiModelService != null) {
+            List<String> dbVocab = sentenceSearchService != null
+                    ? sentenceSearchService.extractDatabaseVocabularyContext(rawQuery, targetLanguageId, translationRepository)
+                    : List.of();
+
+            Optional<TranslationResponse> aiResult = geminiMultiModelService.translateWithFallback(
+                    rawQuery,
+                    sourceLanguageId,
+                    targetLanguageId,
+                    languageRepository,
+                    conceptRepository,
+                    dbVocab
+            );
+            finalResponses = aiResult.map(List::of).orElse(List.of());
+        } else {
+            finalResponses = matches.values()
+                    .stream()
+                    .filter(t ->
+                            t.getConcept() != null &&
+                                    t.getLanguage() != null
+                    )
+                    .map(TranslationResponse::fromTranslation)
+                    .collect(Collectors.toList());
+        }
+
+        /*
          * Response.
          */
-        return ResponseEntity.ok(
-                matches.values()
-                        .stream()
-                        .filter(t ->
-                                t.getConcept() != null &&
-                                        t.getLanguage() != null
-                        )
-                        .map(TranslationResponse::fromTranslation)
-                        .collect(Collectors.toList())
-        );
+        return ResponseEntity.ok()
+                .header("X-RateLimit-Limit-Daily", String.valueOf(rateLimit.getDailyLimit()))
+                .header("X-RateLimit-Remaining-Daily", String.valueOf(rateLimit.getDailyRemaining()))
+                .header("X-RateLimit-Limit-Monthly", String.valueOf(rateLimit.getMonthlyLimit()))
+                .header("X-RateLimit-Remaining-Monthly", String.valueOf(rateLimit.getMonthlyRemaining()))
+                .body(finalResponses);
     }
 
     /*
@@ -1328,49 +1403,5 @@ class TranslationRequest {
 
     public void setNotes(String notes) {
         this.notes = notes;
-    }
-}
-
-
-/*
- * ================================================================
- * SEARCH REQUEST
- * ================================================================
- *
- * If you already have TranslationSearchRequest.java,
- * keep using that existing DTO and remove this class.
- */
-class TranslationSearchRequest {
-
-    private String query;
-    private String sourceLanguageId;
-    private String targetLanguageId;
-
-    public String getQuery() {
-        return query;
-    }
-
-    public void setQuery(String query) {
-        this.query = query;
-    }
-
-    public String getSourceLanguageId() {
-        return sourceLanguageId;
-    }
-
-    public void setSourceLanguageId(
-            String sourceLanguageId) {
-
-        this.sourceLanguageId = sourceLanguageId;
-    }
-
-    public String getTargetLanguageId() {
-        return targetLanguageId;
-    }
-
-    public void setTargetLanguageId(
-            String targetLanguageId) {
-
-        this.targetLanguageId = targetLanguageId;
     }
 }
