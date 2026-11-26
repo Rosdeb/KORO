@@ -819,9 +819,9 @@ public class TranslationController {
         );
 
         /*
-         * 3. AI Multi-Model Fallback:
-         * If no matching words or sentences were found in the database,
-         * automatically query Google Gemini models in failover order.
+         * 3. AI Sentence Assembly:
+         * Strict Barrier: ONLY invoke AI if authentic words exist in our database!
+         * If zero words exist in database, do NOT guess or pull from public web/browser.
          */
         List<TranslationResponse> finalResponses;
         if (matches.isEmpty() && geminiMultiModelService != null) {
@@ -829,15 +829,19 @@ public class TranslationController {
                     ? sentenceSearchService.extractDatabaseVocabularyContext(rawQuery, targetLanguageId, translationRepository)
                     : List.of();
 
-            Optional<TranslationResponse> aiResult = geminiMultiModelService.translateWithFallback(
-                    rawQuery,
-                    sourceLanguageId,
-                    targetLanguageId,
-                    languageRepository,
-                    conceptRepository,
-                    dbVocab
-            );
-            finalResponses = aiResult.map(List::of).orElse(List.of());
+            if (!dbVocab.isEmpty()) {
+                Optional<TranslationResponse> aiResult = geminiMultiModelService.translateWithFallback(
+                        rawQuery,
+                        sourceLanguageId,
+                        targetLanguageId,
+                        languageRepository,
+                        conceptRepository,
+                        dbVocab
+                );
+                finalResponses = aiResult.map(List::of).orElse(List.of());
+            } else {
+                finalResponses = List.of();
+            }
         } else {
             finalResponses = matches.values()
                     .stream()

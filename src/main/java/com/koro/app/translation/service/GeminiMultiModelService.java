@@ -132,6 +132,13 @@ public class GeminiMultiModelService {
             return Optional.empty();
         }
 
+        // Strict Barrier: Ensure AI is NEVER called without database grounding vocabulary.
+        // We do not allow searching the public web/browser or hallucinating non-existent words.
+        if (databaseVocab == null || databaseVocab.isEmpty()) {
+            logger.info("Barrier: No internal database vocabulary found for '{}'. Skipping AI to prevent external web hallucinations.", query);
+            return Optional.empty();
+        }
+
         String sourceLangName = resolveLanguageName(sourceLanguageId, languageRepository, "English");
         String targetLangName = resolveLanguageName(targetLanguageId, languageRepository, "Koch");
 

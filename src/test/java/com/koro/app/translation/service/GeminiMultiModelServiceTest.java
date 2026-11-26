@@ -53,4 +53,13 @@ class GeminiMultiModelServiceTest {
         var res = service.translateWithFallback("hello", null, null, null, null);
         assertTrue(res.isEmpty());
     }
+
+    @Test
+    void barrierBlocksAiWhenDatabaseVocabularyIsEmpty() {
+        service.setEnabled(true);
+        service.setApiKey("test-key");
+        // No database vocabulary -> barrier must immediately return Optional.empty() without calling external API
+        var res = service.translateWithFallback("randomword", null, null, null, null, List.of());
+        assertTrue(res.isEmpty());
+    }
 }
