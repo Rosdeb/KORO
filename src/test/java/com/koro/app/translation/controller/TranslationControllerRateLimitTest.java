@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -157,5 +158,63 @@ class TranslationControllerRateLimitTest {
                 .andExpect(content().string("Query string is empty"));
 
         verifyNoInteractions(translationRateLimitService);
+    }
+
+    @Test
+    void crossLanguageSearchFindsNewlyAddedTranslationFromLiveDatabase() throws Exception {
+        when(translationRateLimitService.checkSearchQuota(any()))
+                .thenReturn(RateLimitResult.allowed(50, 50, 500, 500));
+        when(translationRateLimitService.consumeSearchQuota(any()))
+                .thenReturn(RateLimitResult.allowed(50, 49, 500, 499));
+
+        Concept concept = Concept.builder().id("concept-tree").name("Tree").build();
+        Language english = Language.builder().id("lang-en").name("English").build();
+        Language koch = Language.builder().id("lang-koch").name("Koch").build();
+
+        Translation englishTrans = Translation.builder()
+                .id("t-en-1")
+                .concept(concept)
+                .language(english)
+                .text("Tree")
+                .build();
+
+        Translation kochTrans = Translation.builder()
+                .id("t-koch-1")
+                .concept(concept)
+                .language(koch)
+                .text("Phang")
+                .build();
+
+        // Simulate new translation in DB not in RAM index:
+        when(translationRepository.findByLanguageIdAndTextContainingIgnoreCase("lang-en", "Tree"))
+                .thenReturn(List.of(englishTrans));
+        when(translationRepository.findByConceptIdAndLanguageId("concept-tree", "lang-koch"))
+                .thenReturn(Optional.of(kochTrans));
+
+        mockMvc.perform(post("/api/v1/translations/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "query": "Tree",
+                                    "sourceLanguageId": "lang-en",
+                                    "targetLanguageId": "lang-koch"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].text").value("Phang"))
+                .andExpect(jsonPath("$[0].conceptName").value("Tree"));
+
+        verify(translationRateLimitService).consumeSearchQuota(any());
+    }
+
+    @Test
+    void reindexSearchRebuildsIndexSuccessfully() throws Exception {
+        when(translationRepository.findAll()).thenReturn(List.of());
+        when(translationRepository.count()).thenReturn(150L);
+
+        mockMvc.perform(post("/api/v1/admin/translations/reindex"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Search index rebuilt successfully from latest database state"))
+                .andExpect(jsonPath("$.totalIndexed").value(150));
     }
 }

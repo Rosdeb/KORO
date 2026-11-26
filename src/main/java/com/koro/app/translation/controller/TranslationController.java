@@ -605,9 +605,9 @@ public class TranslationController {
          *
          * Search "hello"
          *
-         * 1. Binary search English
-         * 2. Find matching concepts
-         * 3. Get Bangla translation
+         * 1. Binary search English in-memory index
+         * 2. Live database lookup for newly added / real-time translations
+         * 3. Match concepts and return target language translations
          */
         if (sourceLanguageId != null &&
                 targetLanguageId != null) {
@@ -615,6 +615,7 @@ public class TranslationController {
             Set<String> conceptIds =
                     new LinkedHashSet<>();
 
+            // 1. Binary prefix search
             List<Translation> sourceTextMatches =
                     binaryPrefixSearch(
                             textIndex.getOrDefault(
@@ -644,6 +645,28 @@ public class TranslationController {
                     conceptIds,
                     sourcePronunciationMatches
             );
+
+            // 2. Real-time Database lookup (ensures recently added/updated words in DB are immediately found)
+            List<Translation> dbSourceMatches = translationRepository
+                    .findByLanguageIdAndTextContainingIgnoreCase(sourceLanguageId, rawQuery);
+            if (dbSourceMatches.isEmpty() && !rawQuery.equalsIgnoreCase(query)) {
+                dbSourceMatches = translationRepository
+                        .findByLanguageIdAndTextContainingIgnoreCase(sourceLanguageId, query);
+            }
+            collectConceptIdsFromTranslations(conceptIds, dbSourceMatches);
+
+            List<Translation> dbPronunMatches = translationRepository
+                    .findByLanguageIdAndPronunciationContainingIgnoreCase(sourceLanguageId, rawQuery);
+            collectConceptIdsFromTranslations(conceptIds, dbPronunMatches);
+
+            // 3. Concept Name / Description lookup in database
+            List<Concept> matchedConcepts = conceptRepository
+                    .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(rawQuery, rawQuery);
+            if (matchedConcepts.isEmpty() && !rawQuery.equalsIgnoreCase(query)) {
+                matchedConcepts = conceptRepository
+                        .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(query, query);
+            }
+            collectConceptIdsFromConcepts(conceptIds, matchedConcepts);
 
             /*
              * Return target-language translations.
@@ -710,6 +733,20 @@ public class TranslationController {
             );
 
             /*
+             * Real-time Database lookup for target language.
+             */
+            addMatches(
+                    matches,
+                    translationRepository
+                            .findByLanguageIdAndTextContainingIgnoreCase(targetLanguageId, rawQuery)
+            );
+            addMatches(
+                    matches,
+                    translationRepository
+                            .findByLanguageIdAndPronunciationContainingIgnoreCase(targetLanguageId, rawQuery)
+            );
+
+            /*
              * Concept search.
              *
              * This remains a database query because concepts are
@@ -718,9 +755,13 @@ public class TranslationController {
             List<Concept> concepts =
                     conceptRepository
                             .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                                    query,
-                                    query
+                                    rawQuery,
+                                    rawQuery
                             );
+            if (concepts.isEmpty() && !rawQuery.equalsIgnoreCase(query)) {
+                concepts = conceptRepository
+                        .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(query, query);
+            }
 
             Set<String> conceptIds =
                     new LinkedHashSet<>();
@@ -780,14 +821,26 @@ public class TranslationController {
             );
 
             /*
+             * Real-time Database lookup across all languages.
+             */
+            addMatches(
+                    matches,
+                    translationRepository.findByTextContainingIgnoreCase(rawQuery)
+            );
+
+            /*
              * Concept search.
              */
             List<Concept> concepts =
                     conceptRepository
                             .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                                    query,
-                                    query
+                                    rawQuery,
+                                    rawQuery
                             );
+            if (concepts.isEmpty() && !rawQuery.equalsIgnoreCase(query)) {
+                concepts = conceptRepository
+                        .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(query, query);
+            }
 
             Set<String> conceptIds =
                     new LinkedHashSet<>();
@@ -1349,6 +1402,16 @@ public class TranslationController {
                                 .notFound()
                                 .build()
                 );
+    }
+
+    @PostMapping("/admin/translations/reindex")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> reindexSearch() {
+        rebuildSearchIndex();
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("message", "Search index rebuilt successfully from latest database state");
+        resp.put("totalIndexed", translationRepository.count());
+        return ResponseEntity.ok(resp);
     }
 
     /*

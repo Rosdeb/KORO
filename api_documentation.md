@@ -441,6 +441,7 @@ A submission is a full dictionary entry — a word in its **source language**, p
     POST   /api/v1/admin/translations
     PUT    /api/v1/admin/translations/{id}  -- ADMIN or MODERATOR (see §4)
     DELETE /api/v1/admin/translations/{id}
+    POST   /api/v1/admin/translations/reindex -- Rebuild in-memory search index from live database
     ```
 *   **Access**: `ROLE_ADMIN` only, except the routes marked above which also accept `ROLE_MODERATOR`.
 *   **Note**: the public `GET /api/v1/languages` only returns languages with `active: true` (see §3). To manage — and see — inactive languages, use the admin-only `GET /api/v1/admin/languages`, which returns every language regardless of `active` status. Setting `active: false` via `PUT` is a soft-deactivation: the record still exists and is still editable, it just drops out of the public list.

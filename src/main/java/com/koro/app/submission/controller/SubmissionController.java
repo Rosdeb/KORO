@@ -15,12 +15,14 @@ import com.koro.app.submission.dto.SubmissionReviewRequest;
 import com.koro.app.submission.entity.SubmissionStatus;
 import com.koro.app.submission.entity.TranslationSubmission;
 import com.koro.app.submission.repository.TranslationSubmissionRepository;
+import com.koro.app.translation.controller.TranslationController;
 import com.koro.app.translation.entity.Translation;
 import com.koro.app.translation.repository.TranslationRepository;
 import com.koro.app.user.entity.User;
 import com.koro.app.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +65,10 @@ public class SubmissionController {
 
     @Autowired
     private ActivityLogService activityLogService;
+
+    @Autowired
+    @Lazy
+    private TranslationController translationController;
 
     // --- User Submission endpoints ---
     @PostMapping("/submissions")
@@ -239,6 +245,11 @@ public class SubmissionController {
         if (!failed.isEmpty()) {
             response.put("failed", failed);
         }
+
+        if (translationController != null && !approvedIds.isEmpty()) {
+            translationController.rebuildSearchIndex();
+        }
+
         return ResponseEntity.ok(response);
     }
 
@@ -316,6 +327,10 @@ public class SubmissionController {
                 "Approved dictionary entry '" + submission.getSourceWord() + "'"
                         + (submitter != null ? " from User: " + submitter.getEmail() : ""),
                 submission.getId(), null);
+
+        if (translationController != null) {
+            translationController.rebuildSearchIndex();
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("submission", submission);
