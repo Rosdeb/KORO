@@ -270,6 +270,7 @@ import com.koro.app.translation.dto.TranslationResponse;
 import com.koro.app.translation.dto.TranslationSearchRequest;
 import com.koro.app.translation.entity.Translation;
 import com.koro.app.translation.repository.TranslationRepository;
+import com.koro.app.translation.service.AiSearchCacheService;
 import com.koro.app.translation.service.GeminiMultiModelService;
 import com.koro.app.translation.service.SentenceSearchService;
 import com.koro.app.translation.service.TranslationRateLimitService;
@@ -315,6 +316,9 @@ public class TranslationController {
 
     @Autowired
     private GeminiMultiModelService geminiMultiModelService;
+
+    @Autowired
+    private AiSearchCacheService aiSearchCacheService;
 
     /*
      * ============================================================
@@ -872,38 +876,74 @@ public class TranslationController {
         );
 
         /*
-         * 3. AI Sentence Assembly:
-         * Strict Barrier: ONLY invoke AI if authentic words exist in our database!
-         * If zero words exist in database, do NOT guess or pull from public web/browser.
+         * 3. AI Sentence Assembly & Cache Lookup:
+         * If the query is a multi-word sentence without an exact DB sentence match, or if matches is empty,
+         * we consult the AI cache (Tier 2, sub-5ms) or assemble with Gemini (Tier 3) grounded in authentic DB words.
          */
-        List<TranslationResponse> finalResponses;
-        if (matches.isEmpty() && geminiMultiModelService != null) {
-            List<String> dbVocab = sentenceSearchService != null
-                    ? sentenceSearchService.extractDatabaseVocabularyContext(rawQuery, targetLanguageId, translationRepository)
-                    : List.of();
-
-            if (!dbVocab.isEmpty()) {
-                Optional<TranslationResponse> aiResult = geminiMultiModelService.translateWithFallback(
-                        rawQuery,
-                        sourceLanguageId,
-                        targetLanguageId,
-                        languageRepository,
-                        conceptRepository,
-                        dbVocab
-                );
-                finalResponses = aiResult.map(List::of).orElse(List.of());
-            } else {
-                finalResponses = List.of();
+        boolean isMultiWordSentence = query != null && query.contains(" ");
+        boolean hasExactWholeMatch = false;
+        if (isMultiWordSentence && !matches.isEmpty()) {
+            for (Translation t : matches.values()) {
+                String tText = t.getText() != null ? t.getText().trim() : "";
+                String tEx = t.getExampleSentence() != null ? t.getExampleSentence().trim() : "";
+                if (tText.equalsIgnoreCase(rawQuery) || tText.equalsIgnoreCase(query)
+                        || (!tEx.isEmpty() && (tEx.equalsIgnoreCase(rawQuery) || tEx.equalsIgnoreCase(query)))) {
+                    hasExactWholeMatch = true;
+                    break;
+                }
             }
-        } else {
-            finalResponses = matches.values()
-                    .stream()
-                    .filter(t ->
-                            t.getConcept() != null &&
-                                    t.getLanguage() != null
-                    )
-                    .map(TranslationResponse::fromTranslation)
-                    .collect(Collectors.toList());
+        }
+
+        List<TranslationResponse> finalResponses = new ArrayList<>();
+        boolean shouldAssembleSentenceWithAi = (!hasExactWholeMatch && isMultiWordSentence) || matches.isEmpty();
+        TranslationResponse aiOrCachedResponse = null;
+
+        if (shouldAssembleSentenceWithAi) {
+            // Tier 2: Check AI Search Cache first for instant response
+            if (aiSearchCacheService != null) {
+                Optional<TranslationResponse> cachedOpt = aiSearchCacheService.findInCache(rawQuery, targetLanguageId);
+                if (cachedOpt.isPresent()) {
+                    aiOrCachedResponse = cachedOpt.get();
+                }
+            }
+
+            // Tier 3: If not cached, extract authentic database vocabulary and assemble with Gemini
+            if (aiOrCachedResponse == null && geminiMultiModelService != null) {
+                List<String> dbVocab = sentenceSearchService != null
+                        ? sentenceSearchService.extractDatabaseVocabularyContext(rawQuery, targetLanguageId, translationRepository)
+                        : List.of();
+
+                if (!dbVocab.isEmpty()) {
+                    Optional<TranslationResponse> aiResult = geminiMultiModelService.translateWithFallback(
+                            rawQuery,
+                            sourceLanguageId,
+                            targetLanguageId,
+                            languageRepository,
+                            conceptRepository,
+                            dbVocab
+                    );
+                    if (aiResult.isPresent()) {
+                        aiOrCachedResponse = aiResult.get();
+                        // Persist into ai_db_search collection for future instant hits
+                        if (aiSearchCacheService != null) {
+                            aiSearchCacheService.saveToCache(rawQuery, sourceLanguageId, targetLanguageId,
+                                    aiOrCachedResponse, dbVocab, "gemini");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Put the synthesized/cached sentence translation at index 0 as the primary result
+        if (aiOrCachedResponse != null) {
+            finalResponses.add(aiOrCachedResponse);
+        }
+
+        // Followed by individual component vocabulary words (if any)
+        for (Translation t : matches.values()) {
+            if (t.getConcept() != null && t.getLanguage() != null) {
+                finalResponses.add(TranslationResponse.fromTranslation(t));
+            }
         }
 
         /*

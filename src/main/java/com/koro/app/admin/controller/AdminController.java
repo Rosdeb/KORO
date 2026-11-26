@@ -9,6 +9,8 @@ import com.koro.app.translation.dto.RateLimitConfigDto;
 import com.koro.app.translation.dto.UserRateLimitDto;
 import com.koro.app.translation.dto.UserRateLimitUpdateRequest;
 import com.koro.app.translation.repository.TranslationRepository;
+import com.koro.app.translation.entity.AiSearchCache;
+import com.koro.app.translation.service.AiSearchCacheService;
 import com.koro.app.translation.service.GeminiMultiModelService;
 import com.koro.app.translation.service.TranslationRateLimitService;
 import com.koro.app.user.dto.UserResponse;
@@ -24,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +60,9 @@ public class AdminController {
 
     @Autowired
     private GeminiMultiModelService geminiMultiModelService;
+
+    @Autowired
+    private AiSearchCacheService aiSearchCacheService;
 
     @GetMapping("/statistics")
     public ResponseEntity<?> getDashboardStatistics() {
@@ -170,5 +176,43 @@ public class AdminController {
         resp.put("enabled", geminiMultiModelService.isEnabled());
         resp.put("message", "AI models updated successfully");
         return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/ai-cache")
+    public ResponseEntity<?> listAiSearchCache(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        org.springframework.data.domain.Page<AiSearchCache> cachedPage = aiSearchCacheService.listCachedEntries(page, size);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("content", cachedPage.getContent());
+        response.put("page", cachedPage.getNumber());
+        response.put("size", cachedPage.getSize());
+        response.put("totalElements", cachedPage.getTotalElements());
+        response.put("totalPages", cachedPage.getTotalPages());
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/ai-cache/{id}")
+    public ResponseEntity<?> deleteAiCacheEntry(@PathVariable String id) {
+        boolean deleted = aiSearchCacheService.deleteCacheEntry(id);
+        if (deleted) {
+            Map<String, String> resp = new HashMap<>();
+            resp.put("message", "AI cache entry deleted successfully");
+            return ResponseEntity.ok(resp);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/ai-cache/{id}/promote")
+    public ResponseEntity<?> promoteAiCacheToDictionary(@PathVariable String id) {
+        return aiSearchCacheService.promoteToDictionary(id, conceptRepository, translationRepository, languageRepository)
+                .map(translation -> {
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("message", "AI cached translation promoted to verified dictionary successfully");
+                    resp.put("translationId", translation.getId());
+                    resp.put("conceptId", translation.getConcept() != null ? translation.getConcept().getId() : null);
+                    return ResponseEntity.ok(resp);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

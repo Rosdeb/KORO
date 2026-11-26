@@ -234,10 +234,11 @@ See [Email OTP setup and frontend flow](AUTH_EMAIL_VERIFICATION.md) for configur
     *   In-memory inverted index tokenizes sentences and multi-word queries.
     *   Finds matching sentences even when partial words are matched (e.g. `nang biting` -> matches `nang biting tongto ke?`).
     *   Scores results: Exact sentence (100) > Exact phrase (90) > Token coverage 100% (80) > 75% (60) > 50% (40) > 25% (25) + Word order bigram bonus (+5).
-*   **AI Multi-Model Fallback**:
-    *   When no exact or sentence match is found in the database, automatically queries Google Gemini with multi-model failover.
-    *   If model 1 hits rate limit / quota (HTTP 429), it automatically fails over to model 2, model 3, etc. without error to the user.
-    *   Returns the same `TranslationResponse` contract.
+*   **Tiered Sentence-Aware AI Translation & Cache (`ai_db_search`)**:
+    *   **Tier 1 (Verified Dictionary)**: If an exact sentence or phrase match exists in the dictionary, it is returned immediately.
+    *   **Tier 2 (AI Search Cache)**: If the sentence was previously assembled by AI, it is fetched from the `ai_db_search` collection in **< 5ms** without calling external APIs.
+    *   **Tier 3 (Gemini Multi-Model Assembly)**: If a multi-word sentence is searched and no exact whole-sentence match exists, authentic vocabulary words are extracted from the database and passed to Google Gemini to construct the authentic Koch sentence. The synthesized sentence is placed at **Index 0** (primary result), followed by the component dictionary words, and automatically saved into `ai_db_search` for instant future hits.
+    *   **Strict Grounding Barrier**: AI is **only** invoked if authentic vocabulary words exist in our database. If zero matching words exist, no guessing or public web hallucinations occur.
 *   **Search request body**: `{ "query": "...", "sourceLanguageId": "...", "targetLanguageId": "..." }` — only `query` is required.
     *   `sourceLanguageId` + `targetLanguageId`: cross-language lookup — match `query` in the source language, return the matching concepts' entries in the target language.
     *   `targetLanguageId` only: search within that one language.
@@ -706,5 +707,58 @@ Returns the updated `UserRateLimitDto`.
 > - Setting `customDailyLimit` or `customMonthlyLimit` to `0` or negative removes the custom limit and restores the default system limit.
 > - Setting `resetDailyCount: true` resets today's search counter back to `0`.
 > - Setting `resetMonthlyCount: true` resets this month's search counter back to `0`.
+
+### 7. List AI Search Cache Entries (`ai_db_search`)
+* **`GET /api/v1/admin/ai-cache?page=0&size=20`**
+* **Access**: `ROLE_ADMIN`
+* **Response** (`200 OK`):
+```json
+{
+  "content": [
+    {
+      "id": "674175394f47ec729221a499",
+      "normalizedQuery": "tree and bamboo looks good for see",
+      "rawQuery": "Tree and bambo looks good for see",
+      "targetLanguageId": "6a8f401d5a765b86fc3df6d9",
+      "targetLanguageName": "Koch",
+      "targetText": "Phang ar waa nuko gando se.",
+      "pronunciation": "phang ar waa nuko gando se",
+      "notes": "Authentic sentence composed from Koch vocabulary: Phang, Waa, Gando, Nuko.",
+      "exampleSentence": "Phang ar waa nuko gando se. (Trees and bamboo look good to see.)",
+      "hitCount": 4,
+      "verified": false,
+      "createdAt": "2026-11-26T13:10:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+### 8. Delete AI Cache Entry
+* **`DELETE /api/v1/admin/ai-cache/{id}`**
+* **Access**: `ROLE_ADMIN`
+* **Response** (`200 OK`):
+```json
+{
+  "message": "AI cache entry deleted successfully"
+}
+```
+
+### 9. Promote Cached AI Translation to Verified Dictionary
+* **`POST /api/v1/admin/ai-cache/{id}/promote`**
+* **Access**: `ROLE_ADMIN`
+* **Response** (`200 OK`):
+```json
+{
+  "message": "AI cached translation promoted to verified dictionary successfully",
+  "translationId": "674175394f47ec729221a888",
+  "conceptId": "6a8ef6eb21d2767e52a00c99"
+}
+```
+Creates/updates official `Concept` and `Translation` records, marks `verified: true`, and immediately indexes it into the dictionary!
+
 
 

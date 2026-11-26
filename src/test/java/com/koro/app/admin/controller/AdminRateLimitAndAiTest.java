@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.koro.app.translation.dto.RateLimitConfigDto;
 import com.koro.app.translation.dto.UserRateLimitDto;
 import com.koro.app.translation.dto.UserRateLimitUpdateRequest;
+import com.koro.app.translation.service.AiSearchCacheService;
 import com.koro.app.translation.service.GeminiMultiModelService;
 import com.koro.app.translation.service.TranslationRateLimitService;
 import com.koro.app.user.entity.User;
@@ -22,8 +23,10 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +39,9 @@ class AdminRateLimitAndAiTest {
 
     @Mock
     private GeminiMultiModelService geminiMultiModelService;
+
+    @Mock
+    private AiSearchCacheService aiSearchCacheService;
 
     @Mock
     private UserRepository userRepository;
@@ -167,5 +173,34 @@ class AdminRateLimitAndAiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listAiCacheReturnsPagedResult() throws Exception {
+        when(aiSearchCacheService.listCachedEntries(0, 20)).thenReturn(org.springframework.data.domain.Page.empty());
+
+        mockMvc.perform(get("/api/v1/admin/ai-cache"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void deleteAiCacheReturnsOkWhenExists() throws Exception {
+        when(aiSearchCacheService.deleteCacheEntry("c1")).thenReturn(true);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/v1/admin/ai-cache/c1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("AI cache entry deleted successfully"));
+    }
+
+    @Test
+    void promoteAiCacheReturnsSuccess() throws Exception {
+        com.koro.app.concept.entity.Concept c = com.koro.app.concept.entity.Concept.builder().id("c1").name("Tree").build();
+        com.koro.app.translation.entity.Translation t = com.koro.app.translation.entity.Translation.builder().id("t1").concept(c).build();
+        when(aiSearchCacheService.promoteToDictionary(eq("c1"), any(), any(), any())).thenReturn(Optional.of(t));
+
+        mockMvc.perform(post("/api/v1/admin/ai-cache/c1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("AI cached translation promoted to verified dictionary successfully"))
+                .andExpect(jsonPath("$.translationId").value("t1"));
     }
 }
