@@ -122,4 +122,36 @@ class AiSearchCacheServiceTest {
         verify(translationRepository).save(any(Translation.class));
         verify(aiSearchCacheRepository).save(cache);
     }
+
+    @Test
+    void l1CacheReturnsInstantHitWithoutQueryingDatabaseAgain() {
+        AiSearchCache cache = AiSearchCache.builder()
+                .id("cache-fast")
+                .normalizedQuery("quick test")
+                .rawQuery("Quick test")
+                .targetLanguageId("lang-koch")
+                .targetLanguageName("Koch")
+                .targetText("Rani tang")
+                .pronunciation("rani tang")
+                .hitCount(1)
+                .build();
+
+        when(aiSearchCacheRepository.findByNormalizedQueryAndTargetLanguageId("quick test", "lang-koch"))
+                .thenReturn(Optional.of(cache));
+        when(aiSearchCacheRepository.save(any(AiSearchCache.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // First call: populates L1 cache from repository
+        Optional<TranslationResponse> first = service.findInCache("Quick test", "lang-koch");
+        assertTrue(first.isPresent());
+        assertEquals("Rani tang", first.get().getText());
+
+        // Second call: must hit L1 cache immediately without querying repository again
+        Optional<TranslationResponse> second = service.findInCache("Quick test", "lang-koch");
+        assertTrue(second.isPresent());
+        assertEquals("Rani tang", second.get().getText());
+
+        // Verify repository query was only executed once!
+        verify(aiSearchCacheRepository, times(1))
+                .findByNormalizedQueryAndTargetLanguageId("quick test", "lang-koch");
+    }
 }

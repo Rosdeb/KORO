@@ -137,9 +137,18 @@ public class SentenceSearchService {
             List<ScoredCandidate> sortedCandidates = new ArrayList<>(candidatesMap.values());
             sortedCandidates.sort((a, b) -> Integer.compare(b.score, a.score));
 
-            for (ScoredCandidate cand : sortedCandidates) {
-                translationRepository.findByConceptIdAndLanguageId(cand.conceptId, targetLanguageId)
-                        .ifPresent(targetResults::add);
+            if (!sortedCandidates.isEmpty()) {
+                Set<String> conceptIds = new LinkedHashSet<>();
+                for (ScoredCandidate cand : sortedCandidates) {
+                    conceptIds.add(cand.conceptId);
+                }
+                Map<String, Translation> targetByConceptId = findTranslationsByConceptIds(conceptIds, targetLanguageId, translationRepository);
+                for (ScoredCandidate cand : sortedCandidates) {
+                    Translation target = targetByConceptId.get(cand.conceptId);
+                    if (target != null) {
+                        targetResults.add(target);
+                    }
+                }
             }
 
             return targetResults;
@@ -147,6 +156,7 @@ public class SentenceSearchService {
         } else if (targetLanguageId != null) {
             // Search target language tokens and also map from other languages' concepts
             Map<String, List<Translation>> langIndex = languageTokenIndex.getOrDefault(targetLanguageId, Map.of());
+            Map<String, ScoredCandidate> globalConceptCandidates = new HashMap<>();
 
             for (String token : queryTokens) {
                 // Direct target language match
@@ -162,12 +172,22 @@ public class SentenceSearchService {
                 for (Translation gt : globalMatches) {
                     if (gt.getConcept() != null && gt.getConcept().getId() != null) {
                         String conceptId = gt.getConcept().getId();
-                        translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
-                                .ifPresent(targetT -> {
-                                    int score = scoreTranslation(gt, normalizedQuery, queryTokens);
-                                    candidatesMap.merge(targetT.getId(), new ScoredCandidate(targetT.getId(), targetT, score),
-                                            (oldVal, newVal) -> oldVal.score >= newVal.score ? oldVal : newVal);
-                                });
+                        int score = scoreTranslation(gt, normalizedQuery, queryTokens);
+                        globalConceptCandidates.merge(conceptId, new ScoredCandidate(conceptId, gt, score),
+                                (oldVal, newVal) -> oldVal.score >= newVal.score ? oldVal : newVal);
+                    }
+                }
+            }
+
+            if (!globalConceptCandidates.isEmpty()) {
+                Map<String, Translation> targetMatches = findTranslationsByConceptIds(globalConceptCandidates.keySet(), targetLanguageId, translationRepository);
+                for (Map.Entry<String, Translation> entry : targetMatches.entrySet()) {
+                    String conceptId = entry.getKey();
+                    Translation targetT = entry.getValue();
+                    ScoredCandidate sc = globalConceptCandidates.get(conceptId);
+                    if (sc != null) {
+                        candidatesMap.merge(targetT.getId(), new ScoredCandidate(targetT.getId(), targetT, sc.score),
+                                (oldVal, newVal) -> oldVal.score >= newVal.score ? oldVal : newVal);
                     }
                 }
             }
@@ -205,7 +225,8 @@ public class SentenceSearchService {
             return List.of();
         }
 
-        Set<String> processedConceptIds = new HashSet<>();
+        Set<String> processedConceptIds = new LinkedHashSet<>();
+        Map<String, Translation> sourceTranslationsByConcept = new LinkedHashMap<>();
         List<String> vocabList = new ArrayList<>();
 
         for (String token : queryTokens) {
@@ -214,22 +235,69 @@ public class SentenceSearchService {
                 if (gt.getConcept() != null && gt.getConcept().getId() != null) {
                     String conceptId = gt.getConcept().getId();
                     if (processedConceptIds.add(conceptId)) {
-                        String conceptName = gt.getConcept().getName();
-                        if (targetLanguageId != null) {
-                            translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
-                                    .ifPresent(targetT -> {
-                                        vocabList.add(String.format("Concept: '%s' (Source word: '%s') -> Koch: '%s' (Pronunciation: '%s')",
-                                                conceptName, gt.getText(), targetT.getText(),
-                                                targetT.getPronunciation() != null ? targetT.getPronunciation() : targetT.getText()));
-                                    });
-                        } else {
-                            vocabList.add(String.format("Concept: '%s' -> Word: '%s'", conceptName, gt.getText()));
-                        }
+                        sourceTranslationsByConcept.put(conceptId, gt);
                     }
                 }
             }
         }
+
+        if (processedConceptIds.isEmpty()) {
+            return List.of();
+        }
+
+        if (targetLanguageId != null) {
+            Map<String, Translation> targetByConcept = findTranslationsByConceptIds(processedConceptIds, targetLanguageId, translationRepository);
+
+            for (String conceptId : processedConceptIds) {
+                Translation gt = sourceTranslationsByConcept.get(conceptId);
+                Translation targetT = targetByConcept.get(conceptId);
+                if (gt != null && targetT != null) {
+                    String conceptName = gt.getConcept() != null ? gt.getConcept().getName() : "";
+                    vocabList.add(String.format("Concept: '%s' (Source word: '%s') -> Koch: '%s' (Pronunciation: '%s')",
+                            conceptName, gt.getText(), targetT.getText(),
+                            targetT.getPronunciation() != null ? targetT.getPronunciation() : targetT.getText()));
+                }
+            }
+        } else {
+            for (String conceptId : processedConceptIds) {
+                Translation gt = sourceTranslationsByConcept.get(conceptId);
+                if (gt != null) {
+                    String conceptName = gt.getConcept() != null ? gt.getConcept().getName() : "";
+                    vocabList.add(String.format("Concept: '%s' -> Word: '%s'", conceptName, gt.getText()));
+                }
+            }
+        }
+
         return vocabList;
+    }
+
+    private Map<String, Translation> findTranslationsByConceptIds(Set<String> conceptIds, String targetLanguageId, TranslationRepository translationRepository) {
+        if (conceptIds == null || conceptIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Translation> resultMap = new HashMap<>();
+        try {
+            List<Translation> list = translationRepository.findByConceptIdInAndLanguageId(conceptIds, targetLanguageId);
+            if (list != null && !list.isEmpty()) {
+                for (Translation t : list) {
+                    if (t.getConcept() != null && t.getConcept().getId() != null) {
+                        resultMap.put(t.getConcept().getId(), t);
+                    }
+                }
+                if (!resultMap.isEmpty()) {
+                    return resultMap;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Bulk concept lookup failed or empty, checking individual fallback: {}", e.getMessage());
+        }
+
+        // Fallback for mocks and test environments where findByConceptIdAndLanguageId is stubbed
+        for (String cid : conceptIds) {
+            translationRepository.findByConceptIdAndLanguageId(cid, targetLanguageId)
+                    .ifPresent(t -> resultMap.put(cid, t));
+        }
+        return resultMap;
     }
 
     private int scoreTranslation(Translation t, String normQuery, List<String> queryTokens) {

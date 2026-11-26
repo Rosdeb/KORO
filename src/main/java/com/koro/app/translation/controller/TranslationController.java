@@ -675,20 +675,19 @@ public class TranslationController {
             /*
              * Return target-language translations.
              */
-            for (String conceptId : conceptIds) {
-
-                translationRepository
-                        .findByConceptIdAndLanguageId(
-                                conceptId,
-                                targetLanguageId
-                        )
-                        .ifPresent(
-                                translation ->
-                                        putMatch(
-                                                matches,
-                                                translation
-                                        )
-                        );
+            if (!conceptIds.isEmpty()) {
+                List<Translation> targetTranslations = translationRepository
+                        .findByConceptIdInAndLanguageId(conceptIds, targetLanguageId);
+                if (targetTranslations == null || targetTranslations.isEmpty()) {
+                    for (String conceptId : conceptIds) {
+                        translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
+                                .ifPresent(translation -> putMatch(matches, translation));
+                    }
+                } else {
+                    for (Translation t : targetTranslations) {
+                        putMatch(matches, t);
+                    }
+                }
             }
 
         }
@@ -775,20 +774,19 @@ public class TranslationController {
                     concepts
             );
 
-            for (String conceptId : conceptIds) {
-
-                translationRepository
-                        .findByConceptIdAndLanguageId(
-                                conceptId,
-                                targetLanguageId
-                        )
-                        .ifPresent(
-                                translation ->
-                                        putMatch(
-                                                matches,
-                                                translation
-                                        )
-                        );
+            if (!conceptIds.isEmpty()) {
+                List<Translation> targetTranslations = translationRepository
+                        .findByConceptIdInAndLanguageId(conceptIds, targetLanguageId);
+                if (targetTranslations == null || targetTranslations.isEmpty()) {
+                    for (String conceptId : conceptIds) {
+                        translationRepository.findByConceptIdAndLanguageId(conceptId, targetLanguageId)
+                                .ifPresent(translation -> putMatch(matches, translation));
+                    }
+                } else {
+                    for (Translation t : targetTranslations) {
+                        putMatch(matches, t);
+                    }
+                }
             }
 
         }

@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AiSearchCacheService {
@@ -26,15 +29,41 @@ public class AiSearchCacheService {
     private static final Logger logger = LoggerFactory.getLogger(AiSearchCacheService.class);
 
     private final AiSearchCacheRepository aiSearchCacheRepository;
+    private final Map<String, TranslationResponse> l1Cache = new ConcurrentHashMap<>();
 
     public AiSearchCacheService(AiSearchCacheRepository aiSearchCacheRepository) {
         this.aiSearchCacheRepository = aiSearchCacheRepository;
+    }
+
+    private String getCacheKey(String normalizedQuery, String targetLanguageId) {
+        return (targetLanguageId != null ? targetLanguageId : "all") + "::" + normalizedQuery;
     }
 
     public Optional<TranslationResponse> findInCache(String rawQuery, String targetLanguageId) {
         String normalizedQuery = normalize(rawQuery);
         if (normalizedQuery.isBlank()) {
             return Optional.empty();
+        }
+
+        String cacheKey = getCacheKey(normalizedQuery, targetLanguageId);
+        TranslationResponse cachedMemory = l1Cache.get(cacheKey);
+        if (cachedMemory != null) {
+            // Asynchronously increment hit count without blocking the caller response
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Optional<AiSearchCache> cachedOpt = targetLanguageId != null
+                            ? aiSearchCacheRepository.findByNormalizedQueryAndTargetLanguageId(normalizedQuery, targetLanguageId)
+                            : aiSearchCacheRepository.findByNormalizedQuery(normalizedQuery);
+                    cachedOpt.ifPresent(cached -> {
+                        cached.setHitCount(cached.getHitCount() + 1);
+                        cached.setLastHitAt(LocalDateTime.now());
+                        aiSearchCacheRepository.save(cached);
+                    });
+                } catch (Exception e) {
+                    logger.debug("Failed to async-update hit count for cached query: {}", e.getMessage());
+                }
+            });
+            return Optional.of(cachedMemory);
         }
 
         Optional<AiSearchCache> cachedOpt = targetLanguageId != null
@@ -51,7 +80,9 @@ public class AiSearchCacheService {
                 logger.warn("Failed to update hit count for AI cache id {}: {}", cached.getId(), e.getMessage());
             }
 
-            return Optional.of(toResponse(cached));
+            TranslationResponse response = toResponse(cached);
+            l1Cache.put(cacheKey, response);
+            return Optional.of(response);
         }
 
         return Optional.empty();
@@ -67,6 +98,10 @@ public class AiSearchCacheService {
         if (normalizedQuery.isBlank()) {
             return;
         }
+
+        // Put in memory L1 cache immediately for sub-millisecond retrieval
+        String cacheKey = getCacheKey(normalizedQuery, targetLanguageId);
+        l1Cache.put(cacheKey, response);
 
         try {
             Optional<AiSearchCache> existing = targetLanguageId != null
@@ -132,6 +167,7 @@ public class AiSearchCacheService {
     public boolean deleteCacheEntry(String id) {
         if (aiSearchCacheRepository.existsById(id)) {
             aiSearchCacheRepository.deleteById(id);
+            l1Cache.clear();
             return true;
         }
         return false;
@@ -174,6 +210,7 @@ public class AiSearchCacheService {
 
             cache.setVerified(true);
             aiSearchCacheRepository.save(cache);
+            l1Cache.clear();
 
             logger.info("Promoted AI cache entry '{}' to verified translation with ID: {}", cache.getId(), saved.getId());
             return saved;

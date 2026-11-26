@@ -13,10 +13,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -43,15 +45,22 @@ public class GeminiMultiModelService {
     @Autowired
     public GeminiMultiModelService(
             @Value("${app.gemini.models:gemini-3.8-flash,gemini-3.5-flash,gemini-flash-latest,gemini-pro-latest}") String configuredModels) {
-        this.restClient = RestClient.builder().build();
+        this.restClient = createRestClient();
         this.objectMapper = new ObjectMapper();
         initModels(configuredModels);
     }
 
     public GeminiMultiModelService(String configuredModels, ObjectMapper objectMapper) {
-        this.restClient = RestClient.builder().build();
+        this.restClient = createRestClient();
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         initModels(configuredModels);
+    }
+
+    private static RestClient createRestClient() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(4));
+        return RestClient.builder().requestFactory(factory).build();
     }
 
     private void initModels(String configuredModels) {
