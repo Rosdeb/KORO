@@ -33,29 +33,67 @@ public class DictionaryExportService {
     private static final int BATCH_SIZE = 500;
 
     public void writeAllCsv(OutputStream output) throws IOException {
+        writeCsv(output, null, null);
+    }
+
+    public void writeCsv(OutputStream output, String categoryId, List<String> requestedLanguageIds) throws IOException {
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
 
-        // 1. Identify language IDs for Koch, Bangla, English
-        List<Language> languages = languageRepository.findAll();
-        Set<String> kochLangIds = new HashSet<>();
-        Set<String> banglaLangIds = new HashSet<>();
-        Set<String> englishLangIds = new HashSet<>();
+        // 1. Resolve languages
+        List<Language> allLanguages = languageRepository.findAll();
+        List<Language> selectedLanguages = new ArrayList<>();
 
-        for (Language lang : languages) {
-            String code = lang.getCode() != null ? lang.getCode().trim().toLowerCase() : "";
-            String name = lang.getName() != null ? lang.getName().trim().toLowerCase() : "";
+        if (requestedLanguageIds != null && !requestedLanguageIds.isEmpty()) {
+            List<String> targetIds = requestedLanguageIds.stream()
+                    .flatMap(s -> Arrays.stream(s.split(",")))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .toList();
 
-            if (code.equals("koch") || code.equals("kdq") || code.equals("ko") || name.contains("koch")) {
-                kochLangIds.add(lang.getId());
-            } else if (code.equals("bn") || code.equals("ben") || name.contains("bangla") || name.contains("bengali")) {
-                banglaLangIds.add(lang.getId());
-            } else if (code.equals("en") || code.equals("eng") || name.contains("english")) {
-                englishLangIds.add(lang.getId());
+            for (String target : targetIds) {
+                Language match = allLanguages.stream()
+                        .filter(l -> l.getId().equalsIgnoreCase(target)
+                                || (l.getCode() != null && l.getCode().equalsIgnoreCase(target))
+                                || (l.getName() != null && l.getName().equalsIgnoreCase(target)))
+                        .findFirst()
+                        .orElse(null);
+                if (match != null && !selectedLanguages.contains(match)) {
+                    selectedLanguages.add(match);
+                }
             }
         }
 
-        // CSV Header
-        writer.write("ID,Koch,Bangla,English\r\n");
+        // Default to Koch, Bangla, English if no specific language matched
+        if (selectedLanguages.isEmpty()) {
+            allLanguages.stream()
+                    .filter(this::isKoch)
+                    .findFirst()
+                    .ifPresent(selectedLanguages::add);
+
+            allLanguages.stream()
+                    .filter(this::isBangla)
+                    .findFirst()
+                    .ifPresent(selectedLanguages::add);
+
+            allLanguages.stream()
+                    .filter(this::isEnglish)
+                    .findFirst()
+                    .ifPresent(selectedLanguages::add);
+        }
+
+        if (selectedLanguages.isEmpty()) {
+            selectedLanguages.addAll(allLanguages);
+        }
+
+        // CSV Header: ID followed by each selected language name
+        StringBuilder header = new StringBuilder("ID");
+        for (Language lang : selectedLanguages) {
+            header.append(",").append(escapeCsv(lang.getName()));
+        }
+        header.append("\r\n");
+        writer.write(header.toString());
+
+        boolean filterCategory = categoryId != null && !categoryId.isBlank() && !categoryId.equalsIgnoreCase("ALL");
 
         int page = 0;
         long totalExported = 0;
@@ -63,9 +101,13 @@ public class DictionaryExportService {
 
         do {
             Pageable pageable = PageRequest.of(page, BATCH_SIZE, Sort.by(Sort.Direction.ASC, "id"));
-            conceptPage = conceptRepository.findAll(pageable);
-            List<Concept> concepts = conceptPage.getContent();
+            if (filterCategory) {
+                conceptPage = conceptRepository.findByCategoryId(categoryId, pageable);
+            } else {
+                conceptPage = conceptRepository.findAll(pageable);
+            }
 
+            List<Concept> concepts = conceptPage.getContent();
             if (concepts.isEmpty()) {
                 break;
             }
@@ -75,10 +117,8 @@ public class DictionaryExportService {
                     .filter(Objects::nonNull)
                     .toList();
 
-            // Fetch translations in bulk for this batch
             List<Translation> translations = translationRepository.findByConceptIdIn(conceptIds);
 
-            // Group translations by concept ID
             Map<String, List<Translation>> translationsByConceptId = new HashMap<>();
             for (Translation t : translations) {
                 if (t.getConcept() != null && t.getConcept().getId() != null) {
@@ -92,46 +132,35 @@ public class DictionaryExportService {
                 String conceptId = concept.getId();
                 List<Translation> conceptTranslations = translationsByConceptId.getOrDefault(conceptId, Collections.emptyList());
 
-                String koch = "";
-                String bangla = "";
-                String english = "";
+                StringBuilder row = new StringBuilder(escapeCsv(conceptId));
 
-                for (Translation t : conceptTranslations) {
-                    if (t.getText() == null || t.getText().isBlank()) {
-                        continue;
+                for (Language lang : selectedLanguages) {
+                    String text = "";
+                    for (Translation t : conceptTranslations) {
+                        if (t.getText() == null || t.getText().isBlank()) continue;
+                        Language tLang = t.getLanguage();
+                        if (tLang != null) {
+                            if (tLang.getId().equals(lang.getId())
+                                    || (lang.getCode() != null && lang.getCode().equalsIgnoreCase(tLang.getCode()))
+                                    || (lang.getName() != null && lang.getName().equalsIgnoreCase(tLang.getName()))) {
+                                text = t.getText().trim();
+                                break;
+                            }
+                        }
                     }
-                    String text = t.getText().trim();
-                    Language lang = t.getLanguage();
-                    String langId = lang != null ? lang.getId() : null;
-                    String langCode = lang != null && lang.getCode() != null ? lang.getCode().trim().toLowerCase() : "";
-                    String langName = lang != null && lang.getName() != null ? lang.getName().trim().toLowerCase() : "";
 
-                    if ((langId != null && kochLangIds.contains(langId))
-                            || langCode.equals("koch") || langCode.equals("kdq") || langName.contains("koch")) {
-                        if (koch.isEmpty()) koch = text;
-                    } else if ((langId != null && banglaLangIds.contains(langId))
-                            || langCode.equals("bn") || langCode.equals("ben") || langName.contains("bangla") || langName.contains("bengali")) {
-                        if (bangla.isEmpty()) bangla = text;
-                    } else if ((langId != null && englishLangIds.contains(langId))
-                            || langCode.equals("en") || langCode.equals("eng") || langName.contains("english")) {
-                        if (english.isEmpty()) english = text;
+                    // Fallback to concept canonical name for English if translation text is omitted
+                    if (text.isEmpty() && isEnglish(lang)) {
+                        if (concept.getName() != null && !concept.getName().isBlank()) {
+                            text = concept.getName().trim();
+                        }
                     }
+
+                    row.append(",").append(escapeCsv(text));
                 }
 
-                // If English translation was omitted, fallback to canonical concept name
-                if (english.isEmpty() && concept.getName() != null && !concept.getName().isBlank()) {
-                    english = concept.getName().trim();
-                }
-
-                writer.write(escapeCsv(conceptId));
-                writer.write(",");
-                writer.write(escapeCsv(koch));
-                writer.write(",");
-                writer.write(escapeCsv(bangla));
-                writer.write(",");
-                writer.write(escapeCsv(english));
-                writer.write("\r\n");
-
+                row.append("\r\n");
+                writer.write(row.toString());
                 totalExported++;
             }
 
@@ -140,7 +169,29 @@ public class DictionaryExportService {
             page++;
         } while (conceptPage.hasNext());
 
-        log.info("Dictionary CSV export completed: {} concepts exported.", totalExported);
+        log.info("Dictionary CSV export completed: {} concepts exported (category: {}, languages: {}).",
+                totalExported, categoryId != null ? categoryId : "ALL", selectedLanguages.size());
+    }
+
+    private boolean isKoch(Language lang) {
+        if (lang == null) return false;
+        String code = lang.getCode() != null ? lang.getCode().trim().toLowerCase() : "";
+        String name = lang.getName() != null ? lang.getName().trim().toLowerCase() : "";
+        return code.equals("koch") || code.equals("kdq") || code.equals("ko") || name.contains("koch");
+    }
+
+    private boolean isBangla(Language lang) {
+        if (lang == null) return false;
+        String code = lang.getCode() != null ? lang.getCode().trim().toLowerCase() : "";
+        String name = lang.getName() != null ? lang.getName().trim().toLowerCase() : "";
+        return code.equals("bn") || code.equals("ben") || name.contains("bangla") || name.contains("bengali");
+    }
+
+    private boolean isEnglish(Language lang) {
+        if (lang == null) return false;
+        String code = lang.getCode() != null ? lang.getCode().trim().toLowerCase() : "";
+        String name = lang.getName() != null ? lang.getName().trim().toLowerCase() : "";
+        return code.equals("en") || code.equals("eng") || name.contains("english");
     }
 
     public static String escapeCsv(String value) {
