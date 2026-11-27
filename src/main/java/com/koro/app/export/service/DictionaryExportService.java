@@ -95,12 +95,31 @@ public class DictionaryExportService {
 
         boolean filterCategory = categoryId != null && !categoryId.isBlank() && !categoryId.equalsIgnoreCase("ALL");
 
+        // Preload all translations in one fast query to avoid MongoDB DBRef bulk lookup bottlenecks
+        List<Translation> preloadedTranslations = Collections.emptyList();
+        try {
+            preloadedTranslations = translationRepository.findAll();
+        } catch (Exception e) {
+            log.warn("Could not preload all translations: {}", e.getMessage());
+        }
+
+        Map<String, List<Translation>> preloadedByConceptId = new HashMap<>();
+        if (preloadedTranslations != null) {
+            for (Translation t : preloadedTranslations) {
+                if (t.getConcept() != null && t.getConcept().getId() != null) {
+                    preloadedByConceptId
+                            .computeIfAbsent(t.getConcept().getId(), k -> new ArrayList<>())
+                            .add(t);
+                }
+            }
+        }
+
         int page = 0;
         long totalExported = 0;
         Page<Concept> conceptPage;
 
         do {
-            Pageable pageable = PageRequest.of(page, BATCH_SIZE, Sort.by(Sort.Direction.ASC, "id"));
+            Pageable pageable = PageRequest.of(page, BATCH_SIZE, Sort.by(Sort.Direction.ASC, "name"));
             if (filterCategory) {
                 conceptPage = conceptRepository.findByCategoryId(categoryId, pageable);
             } else {
@@ -117,29 +136,29 @@ public class DictionaryExportService {
                     .filter(Objects::nonNull)
                     .toList();
 
-            List<Translation> translations = Collections.emptyList();
-            try {
-                translations = translationRepository.findByConceptIdIn(conceptIds);
-            } catch (Exception e) {
-                log.warn("findByConceptIdIn failed, falling back: {}", e.getMessage());
-            }
-
-            if (translations == null || translations.isEmpty()) {
-                try {
-                    translations = translationRepository.findAll();
-                } catch (Exception e) {
-                    log.error("Failed to load translations fallback: {}", e.getMessage());
-                }
-            }
-
             Map<String, List<Translation>> translationsByConceptId = new HashMap<>();
-            if (translations != null) {
-                for (Translation t : translations) {
-                    if (t.getConcept() != null && t.getConcept().getId() != null) {
-                        translationsByConceptId
-                                .computeIfAbsent(t.getConcept().getId(), k -> new ArrayList<>())
-                                .add(t);
+            // Prefer preloaded translations if available
+            if (!preloadedByConceptId.isEmpty()) {
+                for (String cid : conceptIds) {
+                    List<Translation> list = preloadedByConceptId.get(cid);
+                    if (list != null) {
+                        translationsByConceptId.put(cid, list);
                     }
+                }
+            } else {
+                try {
+                    List<Translation> list = translationRepository.findByConceptIdIn(conceptIds);
+                    if (list != null) {
+                        for (Translation t : list) {
+                            if (t.getConcept() != null && t.getConcept().getId() != null) {
+                                translationsByConceptId
+                                        .computeIfAbsent(t.getConcept().getId(), k -> new ArrayList<>())
+                                        .add(t);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("findByConceptIdIn failed: {}", e.getMessage());
                 }
             }
 
