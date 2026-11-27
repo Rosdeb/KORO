@@ -137,6 +137,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/admin/contact-messages/**").hasAnyRole("ADMIN", "MODERATOR")
                     .requestMatchers(HttpMethod.PUT, "/api/v1/admin/concepts/*", "/api/v1/admin/translations/*").hasAnyRole("ADMIN", "MODERATOR")
                     .requestMatchers(HttpMethod.GET, "/api/v1/admin/languages").hasAnyRole("ADMIN", "MODERATOR")
+                    .requestMatchers("/api/v1/admin/dictionary/export").permitAll()
                     .requestMatchers("/api/v1/admin/dictionary/**").hasAnyRole("ADMIN", "MODERATOR", "LANGUAGE_REVIEWER")
                     .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()

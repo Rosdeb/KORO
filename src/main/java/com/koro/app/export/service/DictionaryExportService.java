@@ -117,14 +117,29 @@ public class DictionaryExportService {
                     .filter(Objects::nonNull)
                     .toList();
 
-            List<Translation> translations = translationRepository.findByConceptIdIn(conceptIds);
+            List<Translation> translations = Collections.emptyList();
+            try {
+                translations = translationRepository.findByConceptIdIn(conceptIds);
+            } catch (Exception e) {
+                log.warn("findByConceptIdIn failed, falling back: {}", e.getMessage());
+            }
+
+            if (translations == null || translations.isEmpty()) {
+                try {
+                    translations = translationRepository.findAll();
+                } catch (Exception e) {
+                    log.error("Failed to load translations fallback: {}", e.getMessage());
+                }
+            }
 
             Map<String, List<Translation>> translationsByConceptId = new HashMap<>();
-            for (Translation t : translations) {
-                if (t.getConcept() != null && t.getConcept().getId() != null) {
-                    translationsByConceptId
-                            .computeIfAbsent(t.getConcept().getId(), k -> new ArrayList<>())
-                            .add(t);
+            if (translations != null) {
+                for (Translation t : translations) {
+                    if (t.getConcept() != null && t.getConcept().getId() != null) {
+                        translationsByConceptId
+                                .computeIfAbsent(t.getConcept().getId(), k -> new ArrayList<>())
+                                .add(t);
+                    }
                 }
             }
 
