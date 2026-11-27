@@ -8,14 +8,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -29,28 +28,22 @@ public class DictionaryExportController {
 
     @GetMapping("/export")
     @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'LANGUAGE_REVIEWER')")
-    public ResponseEntity<StreamingResponseBody> exportCsv(
+    public ResponseEntity<byte[]> exportCsv(
             @RequestParam(name = "format", defaultValue = "csv", required = false) String format,
             @RequestParam(name = "categoryId", required = false) String categoryId,
             @RequestParam(name = "languageIds", required = false) List<String> languageIds,
-            @RequestParam(name = "languages", required = false) List<String> languages) {
+            @RequestParam(name = "languages", required = false) List<String> languages) throws IOException {
 
         List<String> effectiveLanguageIds = (languageIds != null && !languageIds.isEmpty()) ? languageIds : languages;
 
-        SecurityContext context = SecurityContextHolder.getContext();
-        StreamingResponseBody stream = output -> {
-            SecurityContextHolder.setContext(context);
-            try {
-                // UTF-8 BOM for Excel compatibility
-                output.write(new byte[]{
-                    (byte) 0xEF, (byte) 0xBB, (byte) 0xBF
-                });
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        // UTF-8 BOM for Excel compatibility
+        output.write(new byte[]{
+            (byte) 0xEF, (byte) 0xBB, (byte) 0xBF
+        });
 
-                exportService.writeCsv(output, categoryId, effectiveLanguageIds);
-            } finally {
-                SecurityContextHolder.clearContext();
-            }
-        };
+        exportService.writeCsv(output, categoryId, effectiveLanguageIds);
+        byte[] csvData = output.toByteArray();
 
         String filename = "korot-dictionary";
         if (categoryId != null && !categoryId.isBlank() && !categoryId.equalsIgnoreCase("ALL")) {
@@ -72,6 +65,7 @@ public class DictionaryExportController {
             .contentType(MediaType.parseMediaType(
                 "text/csv; charset=UTF-8"
             ))
-            .body(stream);
+            .contentLength(csvData.length)
+            .body(csvData);
     }
 }
