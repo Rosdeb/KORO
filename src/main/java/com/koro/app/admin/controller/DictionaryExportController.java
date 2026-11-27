@@ -26,7 +26,7 @@ public class DictionaryExportController {
     private final CategoryRepository categoryRepository;
 
     @GetMapping("/export")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'LANGUAGE_REVIEWER')")
     public ResponseEntity<StreamingResponseBody> exportCsv(
             @RequestParam(name = "format", defaultValue = "csv", required = false) String format,
             @RequestParam(name = "categoryId", required = false) String categoryId,

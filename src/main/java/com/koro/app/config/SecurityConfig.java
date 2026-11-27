@@ -69,7 +69,16 @@ public class SecurityConfig {
                 "http://korot.site",
                 "koro.site",
                 "https://www.korot.site",
-                "https://admin.korot.site"
+                "https://admin.korot.site",
+                "https://koro-admin.pages.dev"
+        ));
+        configuration.setAllowedOriginPatterns(List.of(
+                "http://localhost:*",
+                "https://*.pages.dev",
+                "https://*.workers.dev",
+                "https://korot.site",
+                "https://*.korot.site",
+                "http://korot.site"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
@@ -119,7 +128,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/admin/contact-messages/**").hasAnyRole("ADMIN", "MODERATOR")
                     .requestMatchers(HttpMethod.PUT, "/api/v1/admin/concepts/*", "/api/v1/admin/translations/*").hasAnyRole("ADMIN", "MODERATOR")
                     .requestMatchers(HttpMethod.GET, "/api/v1/admin/languages").hasAnyRole("ADMIN", "MODERATOR")
-                    .requestMatchers("/api/v1/admin/dictionary/**").hasAnyRole("ADMIN", "MODERATOR")
+                    .requestMatchers("/api/v1/admin/dictionary/**").hasAnyRole("ADMIN", "MODERATOR", "LANGUAGE_REVIEWER")
                     .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             );

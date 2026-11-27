@@ -57,6 +57,16 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             return headerAuth.substring(7);
         }
 
+        String paramToken = request.getParameter("token");
+        if (StringUtils.hasText(paramToken)) {
+            return paramToken;
+        }
+
+        paramToken = request.getParameter("access_token");
+        if (StringUtils.hasText(paramToken)) {
+            return paramToken;
+        }
+
         return null;
     }
 }
