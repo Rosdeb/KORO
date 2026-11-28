@@ -59,4 +59,10 @@ public class ActivityController {
     public ResponseEntity<?> getActivityStatistics() {
         return ResponseEntity.ok(activityLogService.getStatisticsForCurrentUser());
     }
+
+    @GetMapping("/summary")
+    public ResponseEntity<?> getActivitySummary(
+            @RequestParam(required = false, defaultValue = "Asia/Dhaka") String timezone) {
+        return ResponseEntity.ok(activityLogService.getDailySummaryForCurrentUser(timezone));
+    }
 }

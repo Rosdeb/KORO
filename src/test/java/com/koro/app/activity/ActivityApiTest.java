@@ -93,4 +93,22 @@ class ActivityApiTest {
         assertThrows(RuntimeException.class, () -> service.getLogsForCurrentUser(pageable));
         verifyNoInteractions(repository);
     }
+
+    @Test
+    void controllerCallsSummaryAndReturnsDailyCounts() {
+        ActivityLogService service = mock(ActivityLogService.class);
+        ActivityController controller = new ActivityController();
+        ReflectionTestUtils.setField(controller, "activityLogService", service);
+
+        when(service.getDailySummaryForCurrentUser(eq("Asia/Dhaka"))).thenReturn(java.util.Map.of(
+                "totalContributions", 5L,
+                "dayCounts", java.util.Map.of("2026-11-28", 5L)
+        ));
+
+        var response = controller.getActivitySummary("Asia/Dhaka");
+        assertNotNull(response);
+        assertEquals(200, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        verify(service).getDailySummaryForCurrentUser("Asia/Dhaka");
+    }
 }

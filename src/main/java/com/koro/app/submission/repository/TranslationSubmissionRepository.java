@@ -14,6 +14,7 @@ public interface TranslationSubmissionRepository extends MongoRepository<Transla
     Page<TranslationSubmission> findByStatus(SubmissionStatus status, Pageable pageable);
     Page<TranslationSubmission> findBySubmittedById(String userId, Pageable pageable);
     List<TranslationSubmission> findBySubmittedById(String userId);
+    long countBySubmittedById(String userId);
     List<TranslationSubmission> findBySourceLanguageIdAndSourceWordIgnoreCaseAndStatusNot(
             String sourceLanguageId, String sourceWord, SubmissionStatus status);
     Page<TranslationSubmission> findByReviewedByIdOrderByReviewedAtDesc(String reviewerId, Pageable pageable);
